@@ -1,14 +1,12 @@
 <?php
 
 <?php
-$d = dir("code");
-echo "Path: " . $d->path . "\n";
-echo "<ul>";
-while (false !== ($entry = $d->read())) {
-   echo "<li><a href='{$entry}'>{$entry}</a></li>";
+$files = scandir('./code');
+sort($files); // this does the sorting
+foreach($files as $file){
+   echo'<a href="/code/'.$file.'">'.$file.'</a>';
+   echo'</br>';
 }
-echo "</ul>";
-$d->close();
 ?>
 
 ?>
