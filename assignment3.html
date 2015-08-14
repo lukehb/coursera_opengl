@@ -1,0 +1,66 @@
+<html>
+	<head>
+		<script id="vertex-shader" type="x-shader/x-vertex">
+			attribute vec4 vPosition;
+			attribute vec4 vColor;
+			
+			varying vec4 fColor;
+			
+			void main(){
+				gl_Position = vPosition;
+				fColor = vColor;
+			}
+		</script>
+		<script id="fragment-shader" type="x-shader/x-fragment">
+			precision mediump float;
+			
+			varying vec4 fColor;
+			
+			void main(){
+				gl_FragColor = fColor;
+			}
+		</script>
+		<script type="text/javascript" src="common/webgl-utils.js"></script>
+		<script type="text/javascript" src="common/initShaders.js"></script>
+		<script type="text/javascript" src="common/MV.js"></script>
+		<script type="text/javascript" src="common/flatten.js"></script>
+		<script type="text/javascript" src="common/GG.js"></script>
+		<script type="text/javascript" src="assignment3.js"></script>
+		
+		<link rel="stylesheet" type="text/css" href="common/themes.css">
+		
+		<style type="text/css">
+			canvas {
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				-khtml-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+				outline: none;
+				-webkit-tap-highlight-color: rgba(255, 255, 255, 0); /* mobile webkit */
+			}   
+		</style>
+		
+	</head>
+	<body>
+		<div>
+			<span>Coords: </span>
+			<span id="coordsLabel"></span>
+		</div>
+		<div>
+			<span>Polygon: </span>
+			<select id="polygonMenu">
+				<option value="cube">poly</option>
+				<option value="sphere">line</option>
+				<option value="cone">line</option>
+				<option value="cylinder">line</option>
+			</select>
+		</div>
+		<canvas style="border:1px solid black; cursor:default;" id="gl-canvas" width="512" height="512">
+		Oops ... your browser doesn't support the HTML5 canvas element
+		</canvas>
+		
+		
+	</body>
+</html>

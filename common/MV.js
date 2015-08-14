@@ -21,6 +21,15 @@ function radians( degrees ) {
 }
 
 //----------------------------------------------------------------------------
+
+//probability distribution function
+function pdf(x, std, mean) {
+	var m = std * Math.sqrt(2 * Math.PI);
+	var e = Math.exp(-Math.pow(x - mean, 2) / (2 * Math.pow(std, 2)));
+	return e / m;
+};
+
+//----------------------------------------------------------------------------
 //
 //  Vector Constructors
 //
@@ -304,14 +313,33 @@ function mult( u, v )
         return result;
     }
     else {
-        if ( u.length != v.length ) {
-            throw "mult(): vectors are not the same dimension";
-        }
+		
+		if(u.matrix && !v.matrix || !u.matrix && v.matrix){
+			
+			var matrix = (u.matrix) ? u : v;
+			//we assume vector is also column major, i.e vec4(1,2,3,4) is a [4x1]
+			var vector = (!u.matrix) ? u : v;
+			//check n columns of matrix matches vector size
+			if(matrix.length != vector.length){
+				throw "mult(): matrix must has same number columns as vector size";
+			} 
+			//we have column major matrix, for this we need to dot the rows, so transpose
+			matrix = transpose(matrix);
+			for(i = 0; i < matrix.length; i++){
+				result.push(dot(matrix[i],vector));
+			}
+			
+		}
+		//both vectors
+		else{
+			if ( u.length != v.length ) {
+				throw "mult(): vectors are not the same dimension";
+			}
 
-        for ( var i = 0; i < u.length; ++i ) {
-            result.push( u[i] * v[i] );
-        }
-
+			for ( var i = 0; i < u.length; ++i ) {
+				result.push( u[i] * v[i] );
+			}
+		}
         return result;
     }
 }
@@ -387,6 +415,33 @@ function scalem( x, y, z )
 //
 //  ModelView Matrix Generators
 //
+function fpsCam(eye, pitch, yaw)
+{
+	pitch = pitch * (Math.PI/180);
+	yaw = yaw * (Math.PI/180);
+	// If the pitch and yaw angles are in degrees,
+    // they need to be converted to radians. Here
+    // I assume the values are already converted to radians.
+    var cosPitch = Math.cos(pitch);
+    var sinPitch = Math.sin(pitch);
+    var cosYaw = Math.cos(yaw);
+    var sinYaw = Math.sin(yaw);
+ 
+    var xaxis = [cosYaw, 0, -sinYaw];
+    var yaxis = [sinYaw * sinPitch, cosPitch, cosYaw * sinPitch];
+    var zaxis = [sinYaw * cosPitch, -sinPitch, cosPitch * cosYaw];
+ 
+    // Create a 4x4 view matrix from the right, up, forward and eye position vectors
+    var viewMatrix = mat4(
+        vec4(       xaxis[0],            yaxis[0],            zaxis[0],      0 ),
+        vec4(       xaxis[1],            yaxis[1],            zaxis[1],      0 ),
+        vec4(       xaxis[2],            yaxis[2],            zaxis[2],      0 ),
+        vec4( -dot( xaxis, eye ), -dot( yaxis, eye ), -dot( zaxis, eye ), 1 )
+    );
+     
+    return viewMatrix;
+};
+
 
 function lookAt( eye, at, up )
 {
@@ -489,6 +544,53 @@ function transpose( m )
     
     return result;
 }
+
+//----------------------------------------------------------------------------------------------------------------------
+//
+//
+//
+function inverse(m) {
+  if (!Array.isArray(m) && !m instanceof Float32Array && !m instanceof Float64Array) {
+      throw "inverse(): has to be an array"
+  }
+  if(m.matrix){
+	  m = flatten(m);
+  }
+  if(m.length != 16){
+	  throw "inverse(): only have support for inverting 4x4 matrices"
+  }
+
+  var r = new Array(16);
+  
+  r[0] = m[5]*m[10]*m[15] - m[5]*m[14]*m[11] - m[6]*m[9]*m[15] + m[6]*m[13]*m[11] + m[7]*m[9]*m[14] - m[7]*m[13]*m[10];
+  r[1] = -m[1]*m[10]*m[15] + m[1]*m[14]*m[11] + m[2]*m[9]*m[15] - m[2]*m[13]*m[11] - m[3]*m[9]*m[14] + m[3]*m[13]*m[10];
+  r[2] = m[1]*m[6]*m[15] - m[1]*m[14]*m[7] - m[2]*m[5]*m[15] + m[2]*m[13]*m[7] + m[3]*m[5]*m[14] - m[3]*m[13]*m[6];
+  r[3] = -m[1]*m[6]*m[11] + m[1]*m[10]*m[7] + m[2]*m[5]*m[11] - m[2]*m[9]*m[7] - m[3]*m[5]*m[10] + m[3]*m[9]*m[6];
+
+  r[4] = -m[4]*m[10]*m[15] + m[4]*m[14]*m[11] + m[6]*m[8]*m[15] - m[6]*m[12]*m[11] - m[7]*m[8]*m[14] + m[7]*m[12]*m[10];
+  r[5] = m[0]*m[10]*m[15] - m[0]*m[14]*m[11] - m[2]*m[8]*m[15] + m[2]*m[12]*m[11] + m[3]*m[8]*m[14] - m[3]*m[12]*m[10];
+  r[6] = -m[0]*m[6]*m[15] + m[0]*m[14]*m[7] + m[2]*m[4]*m[15] - m[2]*m[12]*m[7] - m[3]*m[4]*m[14] + m[3]*m[12]*m[6];
+  r[7] = m[0]*m[6]*m[11] - m[0]*m[10]*m[7] - m[2]*m[4]*m[11] + m[2]*m[8]*m[7] + m[3]*m[4]*m[10] - m[3]*m[8]*m[6];
+
+  r[8] = m[4]*m[9]*m[15] - m[4]*m[13]*m[11] - m[5]*m[8]*m[15] + m[5]*m[12]*m[11] + m[7]*m[8]*m[13] - m[7]*m[12]*m[9];
+  r[9] = -m[0]*m[9]*m[15] + m[0]*m[13]*m[11] + m[1]*m[8]*m[15] - m[1]*m[12]*m[11] - m[3]*m[8]*m[13] + m[3]*m[12]*m[9];
+  r[10] = m[0]*m[5]*m[15] - m[0]*m[13]*m[7] - m[1]*m[4]*m[15] + m[1]*m[12]*m[7] + m[3]*m[4]*m[13] - m[3]*m[12]*m[5];
+  r[11] = -m[0]*m[5]*m[11] + m[0]*m[9]*m[7] + m[1]*m[4]*m[11] - m[1]*m[8]*m[7] - m[3]*m[4]*m[9] + m[3]*m[8]*m[5];
+
+  r[12] = -m[4]*m[9]*m[14] + m[4]*m[13]*m[10] + m[5]*m[8]*m[14] - m[5]*m[12]*m[10] - m[6]*m[8]*m[13] + m[6]*m[12]*m[9];
+  r[13] = m[0]*m[9]*m[14] - m[0]*m[13]*m[10] - m[1]*m[8]*m[14] + m[1]*m[12]*m[10] + m[2]*m[8]*m[13] - m[2]*m[12]*m[9];
+  r[14] = -m[0]*m[5]*m[14] + m[0]*m[13]*m[6] + m[1]*m[4]*m[14] - m[1]*m[12]*m[6] - m[2]*m[4]*m[13] + m[2]*m[12]*m[5];
+  r[15] = m[0]*m[5]*m[10] - m[0]*m[9]*m[6] - m[1]*m[4]*m[10] + m[1]*m[8]*m[6] + m[2]*m[4]*m[9] - m[2]*m[8]*m[5];
+
+  var det = m[0]*r[0] + m[1]*r[4] + m[2]*r[8] + m[3]*r[12];
+  
+  if(det == 0){
+	  throw "inverse(): determinant was zero, this is a non-invertible matrix";
+  }
+  
+  for (var i = 0; i < 16; i++) r[i] /= det;
+  return transpose(mat4(r));
+};
 
 //----------------------------------------------------------------------------
 //
