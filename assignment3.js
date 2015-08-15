@@ -23,7 +23,7 @@ window.onload = function init()
 	var renderer = new Assignment3(gl);
 	
 	//set-up gui now that the renderer is ready
-	new Gui(renderer);
+	new Gui(gl, renderer);
 	
 };
 
@@ -31,11 +31,14 @@ window.onload = function init()
 ////////GUI////////////////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
 
-function Gui(renderer){
-	this.setupDrawingState(renderer);
+function Gui(gl, renderer){
+	this.setupDrawingState(gl, renderer);
+	this.hookUpSliders(renderer);
+	this.hookupButtons(renderer);
+	this.hookupMenu(renderer);
 };
 
-Gui.prototype.setupDrawingState = function(renderer){
+Gui.prototype.setupDrawingState = function(gl, renderer){
 	//update the drawing state of mouse up/down
 	var that = this;
 	var canvas = document.getElementById("gl-canvas");
@@ -63,6 +66,16 @@ Gui.prototype.setupDrawingState = function(renderer){
 			lastMousePos = xy;
 		}
 	});
+	canvas.addEventListener("click", function(evt){
+		var target = evt.target || evt.srcElement,
+		rect = target.getBoundingClientRect(),
+		offsetX = evt.clientX - rect.left,
+		offsetY = evt.srcElement.height - (evt.clientY - rect.top);
+		var renderable = renderer.scene.pick(gl, offsetX, offsetY);
+		if(renderable != null){
+			that.makeSelection(renderer, renderable);
+		}
+	});
 	
 };
 
@@ -78,18 +91,130 @@ Gui.prototype.extractXY = function(evt, canvas){
 	return [x,y];
 };
 
+Gui.prototype.hookupMenu = function(renderer){
+	var polygonDropDown = document.getElementById("polygonMenu");
+	var that = this;
+	polygonDropDown.addEventListener("change", function(evt){
+		that.makeSelection(renderer, null);
+		that.resetSliders();
+	});
+};
+
+Gui.prototype.hookUpSliders = function(renderer){
+	var dimensions = ["x", "y", "z"];
+	var transformNames = ["Trans", "Rot", "Scale"];
+	var that = this;
+	for(var i = 0; i < transformNames.length; i++){
+		var transform = transformNames[i];
+		for(var j = 0; j < dimensions.length; j++){
+			var dimension = dimensions[j];
+			var slider = document.getElementById(dimension + transform);
+			slider.addEventListener("input", function(evt){
+				var label = document.getElementById(evt.srcElement.id + "Label");
+				label.innerHTML = evt.srcElement.value;
+				if(renderer.currentRenderable != null){
+					renderer.currentRenderable.transform = that.getTransformFromSliders();
+				}
+			});
+		}
+	}
+};
+
+Gui.prototype.resetSliders = function(renderer){
+	var dimensions = ["x", "y", "z"];
+	var transformNames = ["Trans", "Rot", "Scale"];
+	var that = this;
+	for(var i = 0; i < transformNames.length; i++){
+		var transform = transformNames[i];
+		for(var j = 0; j < dimensions.length; j++){
+			var dimension = dimensions[j];
+			var slider = document.getElementById(dimension + transform);
+			slider.value = slider.getAttribute("data-initial");
+			var label = document.getElementById(slider.id + "Label");
+			label.innerHTML = slider.value;
+		}
+	}
+};
+
+Gui.prototype.hookupButtons = function(renderer){
+	var placePolygonBtn = document.getElementById("placePolygonBtn");
+	var that = this;
+	placePolygonBtn.addEventListener("click", function(evt){
+		var polygonDropDown = document.getElementById("polygonMenu");
+		var polygonMode = polygonDropDown.options[polygonDropDown.selectedIndex].text;
+		var renderable = null;
+		switch(polygonMode){
+			case "cube":
+				renderable = new GG.cube();
+				break;
+			case "sphere":
+				renderable = new GG.sphere();
+				break;
+			case "cylinder":
+				renderable = new GG.cylinder();
+				break;
+			case "cone":
+				renderable = new GG.cone();
+				break;
+		}
+		if(renderable != null){
+			renderable.drawOutline = true;
+			renderable.transform = that.getTransformFromSliders();
+			that.makeSelection(renderer, renderable);
+			renderer.scene.addRenderable(renderable);
+		}
+	});
+	
+	//hook up delete button
+	var deleteBtn = document.getElementById("removePolygonBtn");
+	deleteBtn.addEventListener("click", function(evt){
+		if(renderer.currentRenderable != null){
+			renderer.scene.remove(renderer.currentRenderable);
+			that.makeSelection(renderer, null);
+			that.resetSliders(renderer);
+		}
+	});
+};
+
+Gui.prototype.getTransformFromSliders = function(){
+	var xTrans = document.getElementById("xTrans").value;
+	var yTrans = document.getElementById("yTrans").value;
+	var zTrans = document.getElementById("zTrans").value;
+	var xRot = document.getElementById("xRot").value;
+	var yRot = document.getElementById("yRot").value;
+	var zRot = document.getElementById("zRot").value;
+	var xScale = document.getElementById("xScale").value;
+	var yScale = document.getElementById("yScale").value;
+	var zScale = document.getElementById("zScale").value;
+	var translation = translate(xTrans, yTrans, zTrans);
+	var rotationX = rotate(xRot, [1,0,0]);
+	var rotationY = rotate(yRot, [0,1,0]);
+	var rotationZ = rotate(zRot, [0,0,1]);
+	var rotation = mult(mult(rotationZ, rotationY), rotationX);
+	var scale = scalem(xScale, yScale, zScale);
+	var transform = mult(mult(translation, rotation), scale);
+	return flatten(transform);
+};
+
+Gui.prototype.makeSelection = function(renderer, renderable){
+	if(renderable != null && "name" in renderable){
+		document.getElementById("selectedPolygon").innerHTML = renderable.name;
+	}else{
+		document.getElementById("selectedPolygon").innerHTML = "none";
+	}
+	renderer.currentRenderable = renderable;
+};
+
 ///////////////////////////////////////////////////////////////
 //////////Assignment///////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
 
 function Assignment3(gl){
 	this.gl = gl;
-	
 	var canvas = document.getElementById( "gl-canvas" );
 	this.scene = new GG.scene();
-	
+	this.currentRenderable = null;
 	this.init(gl);
-	
 	this.lastTime = Date.now();
 	this.render(gl);
 };
@@ -113,10 +238,10 @@ Assignment3.prototype.init = function(gl){
 	//var cylinder = new GG.cylinder();
 	//cylinder.drawOutline = true;
 	
-	var sphere = new GG.sphere();
-	sphere.drawOutline = true;
+	//var sphere = new GG.sphere();
+	//sphere.drawOutline = true;
 	
-	this.scene.addRenderable(sphere);
+	//this.scene.addRenderable(sphere);
 };
 
 Assignment3.prototype.render = function(gl){

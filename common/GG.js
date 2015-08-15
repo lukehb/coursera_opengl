@@ -45,14 +45,56 @@ GG.addKeyListener = function(keyCode, callback){
 };
 
 ////////////////////////////////
+//////////Color/////////////////
+////////////////////////////////
+GG.nextRgb = function(){
+	//use golden ratio conjugate
+	var goldenConj = 0.618033988749895;
+	var hue = Math.random();
+	hue += goldenConj;
+	hue %= 1;
+	return GG.hsv2Rgb(hue, 0.5, 0.95);
+};
+
+GG.hsv2Rgb = function(h, s, v){
+	//from: http://stackoverflow.com/questions/17242144/javascript-convert-hsb-hsv-color-to-rgb-accurately
+	var r, g, b, i, f, p, q, t;
+    if (arguments.length === 1) {
+        s = h.s, v = h.v, h = h.h;
+    }
+    i = Math.floor(h * 6);
+    f = h * 6 - i;
+    p = v * (1 - s);
+    q = v * (1 - f * s);
+    t = v * (1 - (1 - f) * s);
+    switch (i % 6) {
+        case 0: r = v, g = t, b = p; break;
+        case 1: r = q, g = v, b = p; break;
+        case 2: r = p, g = v, b = t; break;
+        case 3: r = p, g = q, b = v; break;
+        case 4: r = t, g = p, b = v; break;
+        case 5: r = v, g = p, b = q; break;
+    }
+    return new Float32Array([r,g,b,1]);
+};
+
+GG.rgbToInt = function(r, g, b){
+	var rgb = r;
+	rgb = (rgb << 8) + g;
+	rgb = (rgb << 8) + b;
+	return rgb;
+};
+
+////////////////////////////////
 //////////Shaders///////////////
 ////////////////////////////////
 GG.shaderTypes = {vertex: "VERTEX", fragment: "FRAGMENT"};
 
 GG.simpleVertShader = "attribute vec4 vPosition;" +
 					  "uniform mat4 mvp;" +
+					  "uniform mat4 transform;" +
 					  "void main(){" +
-							"gl_Position = mvp * vPosition;" +
+							"gl_Position = mvp * transform * vPosition;" +
 					  "}";
 
 GG.simpleFragShader = "precision mediump float;" +
@@ -114,12 +156,7 @@ GG.camera.prototype.update = function(){
 	var rot = mult( rotate(this.pitch, [1,0,0]), rotate(this.yaw, [0,1,0]) );
 	var trans = translate(this.eye[0], this.eye[1], this.eye[2]);
 	var m = mult(rot, trans);
-	
-	//var v = inverse(m);
-	//var v = fpsCam(this.eye, this.pitch, this.yaw);
-
 	var out = mult(this.projection, m);
-	//out = mult(out, m);
 	this.mvp = flatten(out);
 };
 
@@ -168,7 +205,7 @@ GG.camera.prototype.drive = function(unitDirectionVec, dir){
 ///////////Scene////////////////
 ////////////////////////////////
 GG.scene = function(){
-	this.renderables = [];
+	this.renderables = {};
 	this.camera = new GG.camera();
 	this.initialised = false;
 	//a method passed to renderables to bind them to the scene
@@ -184,16 +221,35 @@ GG.scene.prototype.init = function(gl){
 	gl.depthFunc(gl.LEQUAL);
 	gl.enable(gl.POLYGON_OFFSET_FILL);
 	gl.polygonOffset(1.0, 2.0);
+	//for reading pixels
+	gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+};
+
+GG.scene.prototype.pick = function(gl, x, y){
+	var pixels = new Uint8Array(4);
+	this.render(gl);
+	gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+	var rgbInt = GG.rgbToInt(pixels[0], pixels[1], pixels[2]);
+	if(rgbInt in this.renderables){
+		return this.renderables[rgbInt];
+	}
+};
+
+GG.scene.prototype.remove = function(renderable){
+	var rgb = renderable.color;
+	var rgbInt = GG.rgbToInt(Math.round(rgb[0]*255), Math.round(rgb[1]*255), Math.round(rgb[2]*255));
+	delete this.renderables[rgbInt];
 };
 
 GG.scene.prototype.render = function(gl){
+	gl.clear( gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT );
 	if(!this.initialised){
 		this.init(gl);
 		this.initialised = true;
 	}
 	
-	for(var i = 0; i < this.renderables.length; i++){
-		var toRender = this.renderables[i];
+	for(var key in this.renderables){
+		var toRender = this.renderables[key];
 		if("render" in toRender){
 			toRender.render(gl);
 		}
@@ -203,7 +259,18 @@ GG.scene.prototype.render = function(gl){
 GG.scene.prototype.addRenderable = function(renderable){
 	//give the renderable the bind to scene function
 	renderable.bindToScene = this.bindToScene;
-	this.renderables.push(renderable);
+	//generate a new color for the renderable
+	var makeColor = true;
+	while(makeColor){
+		var rgb = GG.nextRgb();
+		var rgbInt = GG.rgbToInt(Math.round(rgb[0]*255), Math.round(rgb[1]*255), Math.round(rgb[2]*255));
+		//check if we already have this color
+		if(!this.renderables.hasOwnProperty(rgbInt)){
+			renderable.color = rgb;
+			this.renderables[rgbInt] = renderable;
+			makeColor = false;
+		}
+	}
 };
 
 ////////////////////////////////
@@ -212,7 +279,7 @@ GG.scene.prototype.addRenderable = function(renderable){
 GG.node = function(transform){
 	if(!Array.isArray(transform)){
 		//just use identity matrix
-		transform = mat4(1);
+		transform = flatten(mat4(1));
 	}
 	this.transform = transform;
 };
@@ -259,6 +326,9 @@ GG.renderable.prototype.bind = function(gl, outlineMode){
 	//set-up pointer for vertexPosition
 	gl.vertexAttribPointer( vPosition, 3, gl.FLOAT, false, 0, 0);
 	gl.enableVertexAttribArray( vPosition );
+	//set-transform
+	var uTransform = gl.getUniformLocation(this.shaderProgram, "transform");
+	gl.uniformMatrix4fv(uTransform, false, this.transform);
 	//set-up the colour location
 	var uColor = gl.getUniformLocation(this.shaderProgram, "uColor");
 	//depends whether we are drawing the poly or the outline
@@ -311,6 +381,7 @@ GG.cube = function(vertShaderId, fragShaderId, transform){
 	GG.renderable.apply(this, arguments);
 	this.faces = 6;
 	this.vertsPerFace = 4;
+	this.name = "cube";
 };
 GG.isA(GG.cube, GG.renderable);
 
@@ -332,6 +403,7 @@ GG.cube.prototype.initialise = function(gl){
 GG.cone = function(vertShaderId, fragShaderId, transform){
 	GG.renderable.apply(this, arguments);
 	this.divisions = 12;
+	this.name = "cone";
 };
 GG.isA(GG.cone, GG.renderable);
 
@@ -370,6 +442,7 @@ GG.cone.prototype.initialise = function(gl){
 GG.cylinder = function(vertShaderId, fragShaderId, transform){
 	GG.renderable.apply(this, arguments);
 	this.divisions = 12;
+	this.name = "cylinder";
 };
 GG.isA(GG.cylinder, GG.renderable);
 
@@ -419,6 +492,7 @@ GG.sphere = function(vertShaderId, fragShaderId, transform){
 	GG.renderable.apply(this, arguments);
 	this.divisions = 12;
 	this.vertsPerFace = 4;
+	this.name = "sphere";
 };
 GG.isA(GG.sphere, GG.renderable);
 
