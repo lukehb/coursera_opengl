@@ -283,10 +283,54 @@ GG.node = function(transform){
 	}
 	this.transform = transform;
 };
+
 GG.node.prototype.getTransform = function(){
 	return this.transform;
 };
 
+GG.node.prototype.getTranslation = function(){
+	return [this.transform[12], this.transform[13], this.transform[14]];
+};
+
+GG.node.prototype.getScale = function(){
+	var x = length([this.transform[0], this.transform[1], this.transform[2]]);
+	var y = length([this.transform[4], this.transform[5], this.transform[6]]);
+	var z = length([this.transform[8], this.transform[9], this.transform[10]]);
+	return [x,y,z];
+};
+
+GG.node.prototype.getRotation = function(){
+	var scale = this.getScale();
+	var m = this.transform;
+	
+	//un-scale the transformation matrix
+	var r11 = m[0]/scale[0];
+	var r12 = m[4]/scale[1];
+	var r13 = m[8]/scale[2];
+	var r21 = m[1]/scale[0];
+	var r22 = m[5]/scale[1];
+	var r23 = m[9]/scale[2];
+	var r31 = m[2]/scale[0];
+	var r32 = m[6]/scale[1];
+	var r33 = m[10]/scale[2];
+	var theta, psi, phi;
+	if(r31 != 1 && r31 != -1){
+		theta = -Math.asin(r31);
+		var cTheta = Math.cos(theta);
+		psi = Math.atan2(r32/cTheta, r33/cTheta);
+		phi = Math.atan2(r21/cTheta, r11/cTheta);
+	}else{
+		var phi = 0;
+		if(r31 == -1){
+			theta = Math.PI/2;
+			psi = phi + Math.atan2(r12, r13);
+		}else{
+			theta = -Math.PI/2;
+			psi = -phi + Math.atan2(-r12, -r13);
+		}
+	}
+	return [degrees(psi), degrees(theta), degrees(phi)];
+};
 
 ////////////////////////////////
 ////////RENDERABLE//////////////

@@ -65,9 +65,9 @@
 			</div>
 			<hr>
 			<span>Translation: </span>
-			<div> <span>x:</span> <input id="xTrans" type="range" data-initial="0" min="-100" max="100"> <span id="xTransLabel">0</span> </div>
-			<div> <span>y:</span> <input id="yTrans" type="range" data-initial="0" min="-100" max="100"> <span id="yTransLabel">0</span></div>
-			<div> <span>z:</span> <input id="zTrans" type="range" data-initial="0" min="-100" max="100"> <span id="zTransLabel">0</span></div>
+			<div> <span>x:</span> <input id="xTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="xTransLabel">0</span> </div>
+			<div> <span>y:</span> <input id="yTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="yTransLabel">0</span></div>
+			<div> <span>z:</span> <input id="zTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="zTransLabel">0</span></div>
 			<hr>
 			<span>Rotation: </span>
 			<div> <span>x:</span> <input id="xRot" type="range" data-initial="0" min="0" max="360" value="0"> <span id="xRotLabel">0</span> </div>
@@ -75,10 +75,10 @@
 			<div> <span>z:</span> <input id="zRot" type="range" data-initial="0" min="0" max="360" value="0"> <span id="zRotLabel">0</span></div>
 			<hr>
 			<span>Scale: </span>
-			<div> <span>x:</span> <input id="xScale" type="range" data-initial="1" min="0" max="10" value="1"> <span id="xScaleLabel">1
+			<div> <span>x:</span> <input id="xScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="xScaleLabel">1
 			</span> </div>
-			<div> <span>y:</span> <input id="yScale" type="range" data-initial="1" min="0" max="10" value="1"> <span id="yScaleLabel">1</span></div>
-			<div> <span>z:</span> <input id="zScale" type="range" data-initial="1" min="0" max="10" value="1"> <span id="zScaleLabel">1</span></div>
+			<div> <span>y:</span> <input id="yScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="yScaleLabel">1</span></div>
+			<div> <span>z:</span> <input id="zScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="zScaleLabel">1</span></div>
 			<hr>
 			<div style="text-align: center">
 				<button id="placePolygonBtn">Place</button>

@@ -159,6 +159,7 @@ Gui.prototype.hookupButtons = function(renderer){
 		}
 		if(renderable != null){
 			renderable.drawOutline = true;
+			that.resetSliders(renderer);
 			renderable.transform = that.getTransformFromSliders();
 			that.makeSelection(renderer, renderable);
 			renderer.scene.addRenderable(renderable);
@@ -196,9 +197,37 @@ Gui.prototype.getTransformFromSliders = function(){
 	return flatten(transform);
 };
 
+Gui.prototype.setSliderValues = function(translation, rotation, scale){
+	document.getElementById("xTrans").value = translation[0];
+	document.getElementById("yTrans").value = translation[1];
+	document.getElementById("zTrans").value = translation[2];
+	document.getElementById("xTransLabel").innerHTML = translation[0];
+	document.getElementById("yTransLabel").innerHTML = translation[1];
+	document.getElementById("zTransLabel").innerHTML = translation[2];
+	
+	document.getElementById("xRot").value = rotation[0];
+	document.getElementById("yRot").value = rotation[1];
+	document.getElementById("zRot").value = rotation[2];
+	document.getElementById("xRotLabel").innerHTML = rotation[0];
+	document.getElementById("yRotLabel").innerHTML = rotation[1];
+	document.getElementById("zRotLabel").innerHTML = rotation[2];
+	
+	document.getElementById("xScale").value = scale[0];
+	document.getElementById("yScale").value = scale[1];
+	document.getElementById("zScale").value = scale[2];
+	document.getElementById("xScaleLabel").innerHTML = scale[0];
+	document.getElementById("yScaleLabel").innerHTML = scale[1];
+	document.getElementById("zScaleLabel").innerHTML = scale[2];
+};
+
 Gui.prototype.makeSelection = function(renderer, renderable){
 	if(renderable != null && "name" in renderable){
 		document.getElementById("selectedPolygon").innerHTML = renderable.name;
+		//set sliders from transform
+		var translation = renderable.getTranslation();
+		var scale = renderable.getScale();
+		var rotation = renderable.getRotation();
+		this.setSliderValues(translation, rotation, scale);
 	}else{
 		document.getElementById("selectedPolygon").innerHTML = "none";
 	}
