@@ -223,6 +223,10 @@ GG.scene.prototype.init = function(gl){
 	gl.polygonOffset(1.0, 2.0);
 	//for reading pixels
 	gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+	//cull back faces
+	gl.enable(gl.CULL_FACE);
+	gl.cullFace(gl.BACK);
+	gl.frontFace(gl.CCW);
 };
 
 GG.scene.prototype.pick = function(gl, x, y){
@@ -433,12 +437,12 @@ GG.cube.prototype.initialise = function(gl){
 	var verts = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[1,-1,1],[-1,-1,1],[-1,1,1],[1,1,1]];
 	//36 vertices because we draw each triangle redundantly (using gl.TRIANGLES)
 	var cubeVerts = new Float32Array([].concat(
-		verts[0], verts[1], verts[2], verts[3], //front
-		verts[4], verts[5], verts[6], verts[7], //back
-		verts[1], verts[4], verts[7], verts[2], //right
-		verts[5], verts[0], verts[3], verts[6], //left
-		verts[3], verts[2], verts[7], verts[6], //top
-		verts[5], verts[4], verts[1], verts[0] //bottom
+		verts[3], verts[2], verts[1], verts[0], //front
+		verts[7], verts[6], verts[5], verts[4], //back
+		verts[2], verts[7], verts[4], verts[1], //right
+		verts[6], verts[3], verts[0], verts[5], //left
+		verts[6], verts[7], verts[2], verts[3], //top
+		verts[0], verts[1], verts[4], verts[5] //bottom 
 	));
 	gl.bufferData( gl.ARRAY_BUFFER, cubeVerts, gl.STATIC_DRAW );
 };
@@ -463,19 +467,23 @@ GG.cone.prototype.initialise = function(gl){
 	
 	for(var part = 0; part < 2; part++){
 		var mid = [0, part, 0];
-		addVert(mid);
 		for(var angle = 0; angle < 360; angle += angleIncrement){
 			var theta = radians(angle);
+			var theta2 = radians(angle + angleIncrement);
 			//note we don't do r * cos(a), because we assume radius is 1
 			var edge = [Math.cos(theta),1,Math.sin(theta)];
-			addVert(edge);
-			if(angle != 0){
-				addVert(edge);
+			var edge2 = [Math.cos(theta2),1,Math.sin(theta2)];
+			if(part == 0){
 				addVert(mid);
+				addVert(edge);
+				addVert(edge2);
+			}else{
+				addVert(mid);
+				addVert(edge2);
+				addVert(edge);
 			}
+			
 		}
-		//loop back to the vert at zero degrees
-		addVert([Math.cos(0),1,Math.sin(0)]);
 	}
 	this.faces = data.length/9;
 	gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW );
@@ -511,16 +519,16 @@ GG.cylinder.prototype.initialise = function(gl){
 		var topedge2 = [Math.cos(theta2),1,Math.sin(theta2)];
 		var botedge1 = [topedge1[0], 0, topedge1[2]];
 		var botedge2 = [topedge2[0], 0, topedge2[2]];
-		addVert(topedge1);
 		addVert(topedge2);
+		addVert(topedge1);
 		//go down
 		addVert(topedge2);
 		addVert(botedge2);
 		addVert(botedge1);
 		//bottom
-		addVert(botedge1);
-		addVert(bottom);
 		addVert(botedge2);
+		addVert(bottom);
+		addVert(botedge1);
 		//go back up
 		addVert(botedge1);
 		addVert(topedge1);
@@ -563,10 +571,12 @@ GG.sphere.prototype.initialise = function(gl){
 			var sPhi2 = Math.sin(phi2);
 			var cPhi1 = Math.cos(phi1);
 			var cPhi2 = Math.cos(phi2);
-			data = data.concat(cTheta1 * cPhi1, cTheta1 * sPhi1, sTheta1);
-			data = data.concat(cTheta2 * cPhi1, cTheta2 * sPhi1, sTheta2);
-			data = data.concat(cTheta2 * cPhi2, cTheta2 * sPhi2, sTheta2);
+			
 			data = data.concat(cTheta1 * cPhi2, cTheta1 * sPhi2, sTheta1);
+			data = data.concat(cTheta2 * cPhi2, cTheta2 * sPhi2, sTheta2);
+			data = data.concat(cTheta2 * cPhi1, cTheta2 * sPhi1, sTheta2);
+			data = data.concat(cTheta1 * cPhi1, cTheta1 * sPhi1, sTheta1);
+			
        }
     }
 	

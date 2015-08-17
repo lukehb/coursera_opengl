@@ -20,7 +20,7 @@ window.onload = function init()
     if ( !gl ) { alert( "WebGL isn't available" ); }
 	
 	//set-up our renderer
-	var renderer = new Assignment3(gl);
+	var renderer = new Assignment4(gl);
 	
 	//set-up gui now that the renderer is ready
 	new Gui(gl, renderer);
@@ -239,7 +239,7 @@ Gui.prototype.makeSelection = function(renderer, renderable){
 //////////Assignment///////////////////////////////////////////
 ///////////////////////////////////////////////////////////////
 
-function Assignment3(gl){
+function Assignment4(gl){
 	this.gl = gl;
 	var canvas = document.getElementById( "gl-canvas" );
 	this.scene = new GG.scene();
@@ -249,7 +249,7 @@ function Assignment3(gl){
 	this.render(gl);
 };
 
-Assignment3.prototype.init = function(gl){
+Assignment4.prototype.init = function(gl){
     gl.clearColor( 1.0, 1.0, 1.0, 1.0 );
 	
 	//key controls
@@ -274,7 +274,7 @@ Assignment3.prototype.init = function(gl){
 	//this.scene.addRenderable(sphere);
 };
 
-Assignment3.prototype.render = function(gl){
+Assignment4.prototype.render = function(gl){
 	
 	var that = this;
 	

@@ -1,0 +1,95 @@
+<html>
+	<head>
+		<script id="vertex-shader" type="x-shader/x-vertex">
+			attribute vec4 vPosition;
+			attribute vec4 vColor;
+			
+			varying vec4 fColor;
+			
+			void main(){
+				gl_Position = vPosition;
+				fColor = vColor;
+			}
+		</script>
+		<script id="fragment-shader" type="x-shader/x-fragment">
+			precision mediump float;
+			
+			varying vec4 fColor;
+			
+			void main(){
+				gl_FragColor = fColor;
+			}
+		</script>
+		<script type="text/javascript" src="common/webgl-utils.js"></script>
+		<script type="text/javascript" src="common/initShaders.js"></script>
+		<script type="text/javascript" src="common/MV.js"></script>
+		<script type="text/javascript" src="common/flatten.js"></script>
+		<script type="text/javascript" src="common/GG.js"></script>
+		<script type="text/javascript" src="assignment4.js"></script>
+		
+		<link rel="stylesheet" type="text/css" href="common/themes.css">
+		
+		<style type="text/css">
+			canvas {
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				-khtml-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+				outline: none;
+				-webkit-tap-highlight-color: rgba(255, 255, 255, 0); /* mobile webkit */
+			}   
+		</style>
+		
+	</head>
+	<body>
+		<div>
+			<span>Coords: </span>
+			<span id="coordsLabel"></span>
+		</div>
+		
+		<canvas style="border:1px solid black; cursor:default; float:left;" id="gl-canvas" width="512" height="512">
+		Oops ... your browser doesn't support the HTML5 canvas element
+		</canvas>
+		
+		<div style="border:1px solid black; float:left; padding:1em;">
+			<div>
+				<span>Polygon: </span>
+				<select id="polygonMenu">
+					<option value="cube">cube</option>
+					<option value="sphere">sphere</option>
+					<option value="cone">cone</option>
+					<option value="cylinder">cylinder</option>
+				</select>
+			</div>
+			<hr>
+			<span>Translation: </span>
+			<div> <span>x:</span> <input id="xTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="xTransLabel">0</span> </div>
+			<div> <span>y:</span> <input id="yTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="yTransLabel">0</span></div>
+			<div> <span>z:</span> <input id="zTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="zTransLabel">0</span></div>
+			<hr>
+			<span>Rotation: </span>
+			<div> <span>x:</span> <input id="xRot" type="range" data-initial="0" min="0" max="360" value="0"> <span id="xRotLabel">0</span> </div>
+			<div> <span>y:</span> <input id="yRot" type="range" data-initial="0" min="0" max="360" value="0"> <span id="yRotLabel">0</span></div>
+			<div> <span>z:</span> <input id="zRot" type="range" data-initial="0" min="0" max="360" value="0"> <span id="zRotLabel">0</span></div>
+			<hr>
+			<span>Scale: </span>
+			<div> <span>x:</span> <input id="xScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="xScaleLabel">1
+			</span> </div>
+			<div> <span>y:</span> <input id="yScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="yScaleLabel">1</span></div>
+			<div> <span>z:</span> <input id="zScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="zScaleLabel">1</span></div>
+			<hr>
+			<div style="text-align: center">
+				<button id="placePolygonBtn">Place</button>
+				<button id="removePolygonBtn">Delete</button>
+			</div>
+			<hr>
+			<div style="text-align: center">
+				<span>Selected: </span><span id="selectedPolygon">None</span>
+			</div>
+		</div>
+		
+		
+	</body>
+</html>
