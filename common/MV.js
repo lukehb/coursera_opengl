@@ -16,22 +16,14 @@ function _argumentsToArray( args )
 
 //----------------------------------------------------------------------------
 
-function degrees( radians ) {
-	return radians * (180.0 / Math.PI);
+function degrees( rads ) {
+	return (rads * 180.0)/ Math.PI;
+	return (rads * 180.0)/ Math.PI;
 }
 
 function radians( degrees ) {
     return degrees * Math.PI / 180.0;
 }
-
-//----------------------------------------------------------------------------
-
-//probability distribution function
-function pdf(x, std, mean) {
-	var m = std * Math.sqrt(2 * Math.PI);
-	var e = Math.exp(-Math.pow(x - mean, 2) / (2 * Math.pow(std, 2)));
-	return e / m;
-};
 
 //----------------------------------------------------------------------------
 //
@@ -178,7 +170,7 @@ function mat4()
 function equal( u, v )
 {
     if ( u.length != v.length ) { return false; }
-   
+
     if ( u.matrix && v.matrix ) {
         for ( var i = 0; i < u.length; ++i ) {
             if ( u[i].length != v[i].length ) { return false; }
@@ -397,6 +389,35 @@ function rotate( angle, axis )
     return result;
 }
 
+function rotateX(theta) {
+  var c = Math.cos( radians(theta) );
+  var s = Math.sin( radians(theta) );
+  var rx = mat4( 1.0,  0.0,  0.0, 0.0,
+      0.0,  c,  s, 0.0,
+      0.0, -s,  c, 0.0,
+      0.0,  0.0,  0.0, 1.0 );
+  return rx;
+}
+function rotateY(theta) {
+  var c = Math.cos( radians(theta) );
+  var s = Math.sin( radians(theta) );
+  var ry = mat4( c, 0.0, -s, 0.0,
+      0.0, 1.0,  0.0, 0.0,
+      s, 0.0,  c, 0.0,
+      0.0, 0.0,  0.0, 1.0 );
+  return ry;
+}
+function rotateZ(theta) {
+  var c = Math.cos( radians(theta) );
+  var s = Math.sin( radians(theta) );
+  var rz = mat4( c, s, 0.0, 0.0,
+      -s,  c, 0.0, 0.0,
+      0.0,  0.0, 1.0, 0.0,
+      0.0,  0.0, 0.0, 1.0 );
+  return rz;
+}
+
+
 //----------------------------------------------------------------------------
 
 function scalem( x, y, z )
@@ -419,33 +440,6 @@ function scalem( x, y, z )
 //
 //  ModelView Matrix Generators
 //
-function fpsCam(eye, pitch, yaw)
-{
-	pitch = pitch * (Math.PI/180);
-	yaw = yaw * (Math.PI/180);
-	// If the pitch and yaw angles are in degrees,
-    // they need to be converted to radians. Here
-    // I assume the values are already converted to radians.
-    var cosPitch = Math.cos(pitch);
-    var sinPitch = Math.sin(pitch);
-    var cosYaw = Math.cos(yaw);
-    var sinYaw = Math.sin(yaw);
- 
-    var xaxis = [cosYaw, 0, -sinYaw];
-    var yaxis = [sinYaw * sinPitch, cosPitch, cosYaw * sinPitch];
-    var zaxis = [sinYaw * cosPitch, -sinPitch, cosPitch * cosYaw];
- 
-    // Create a 4x4 view matrix from the right, up, forward and eye position vectors
-    var viewMatrix = mat4(
-        vec4(       xaxis[0],            yaxis[0],            zaxis[0],      0 ),
-        vec4(       xaxis[1],            yaxis[1],            zaxis[1],      0 ),
-        vec4(       xaxis[2],            yaxis[2],            zaxis[2],      0 ),
-        vec4( -dot( xaxis, eye ), -dot( yaxis, eye ), -dot( zaxis, eye ), 1 )
-    );
-     
-    return viewMatrix;
-};
-
 
 function lookAt( eye, at, up )
 {
@@ -500,9 +494,9 @@ function ortho( left, right, bottom, top, near, far )
     result[0][0] = 2.0 / w;
     result[1][1] = 2.0 / h;
     result[2][2] = -2.0 / d;
-    result[0][3] = (left + right) / w;
-    result[1][3] = (top + bottom) / h;
-    result[2][3] = (near + far) / d;
+    result[0][3] = -(left + right) / w;
+    result[1][3] = -(top + bottom) / h;
+    result[2][3] = -(near + far) / d;
 
     return result;
 }
@@ -545,56 +539,9 @@ function transpose( m )
     }
 
     result.matrix = true;
-    
+
     return result;
 }
-
-//----------------------------------------------------------------------------------------------------------------------
-//
-//
-//
-function inverse(m) {
-  if (!Array.isArray(m) && !m instanceof Float32Array && !m instanceof Float64Array) {
-      throw "inverse(): has to be an array"
-  }
-  if(m.matrix){
-	  m = flatten(m);
-  }
-  if(m.length != 16){
-	  throw "inverse(): only have support for inverting 4x4 matrices"
-  }
-
-  var r = new Array(16);
-  
-  r[0] = m[5]*m[10]*m[15] - m[5]*m[14]*m[11] - m[6]*m[9]*m[15] + m[6]*m[13]*m[11] + m[7]*m[9]*m[14] - m[7]*m[13]*m[10];
-  r[1] = -m[1]*m[10]*m[15] + m[1]*m[14]*m[11] + m[2]*m[9]*m[15] - m[2]*m[13]*m[11] - m[3]*m[9]*m[14] + m[3]*m[13]*m[10];
-  r[2] = m[1]*m[6]*m[15] - m[1]*m[14]*m[7] - m[2]*m[5]*m[15] + m[2]*m[13]*m[7] + m[3]*m[5]*m[14] - m[3]*m[13]*m[6];
-  r[3] = -m[1]*m[6]*m[11] + m[1]*m[10]*m[7] + m[2]*m[5]*m[11] - m[2]*m[9]*m[7] - m[3]*m[5]*m[10] + m[3]*m[9]*m[6];
-
-  r[4] = -m[4]*m[10]*m[15] + m[4]*m[14]*m[11] + m[6]*m[8]*m[15] - m[6]*m[12]*m[11] - m[7]*m[8]*m[14] + m[7]*m[12]*m[10];
-  r[5] = m[0]*m[10]*m[15] - m[0]*m[14]*m[11] - m[2]*m[8]*m[15] + m[2]*m[12]*m[11] + m[3]*m[8]*m[14] - m[3]*m[12]*m[10];
-  r[6] = -m[0]*m[6]*m[15] + m[0]*m[14]*m[7] + m[2]*m[4]*m[15] - m[2]*m[12]*m[7] - m[3]*m[4]*m[14] + m[3]*m[12]*m[6];
-  r[7] = m[0]*m[6]*m[11] - m[0]*m[10]*m[7] - m[2]*m[4]*m[11] + m[2]*m[8]*m[7] + m[3]*m[4]*m[10] - m[3]*m[8]*m[6];
-
-  r[8] = m[4]*m[9]*m[15] - m[4]*m[13]*m[11] - m[5]*m[8]*m[15] + m[5]*m[12]*m[11] + m[7]*m[8]*m[13] - m[7]*m[12]*m[9];
-  r[9] = -m[0]*m[9]*m[15] + m[0]*m[13]*m[11] + m[1]*m[8]*m[15] - m[1]*m[12]*m[11] - m[3]*m[8]*m[13] + m[3]*m[12]*m[9];
-  r[10] = m[0]*m[5]*m[15] - m[0]*m[13]*m[7] - m[1]*m[4]*m[15] + m[1]*m[12]*m[7] + m[3]*m[4]*m[13] - m[3]*m[12]*m[5];
-  r[11] = -m[0]*m[5]*m[11] + m[0]*m[9]*m[7] + m[1]*m[4]*m[11] - m[1]*m[8]*m[7] - m[3]*m[4]*m[9] + m[3]*m[8]*m[5];
-
-  r[12] = -m[4]*m[9]*m[14] + m[4]*m[13]*m[10] + m[5]*m[8]*m[14] - m[5]*m[12]*m[10] - m[6]*m[8]*m[13] + m[6]*m[12]*m[9];
-  r[13] = m[0]*m[9]*m[14] - m[0]*m[13]*m[10] - m[1]*m[8]*m[14] + m[1]*m[12]*m[10] + m[2]*m[8]*m[13] - m[2]*m[12]*m[9];
-  r[14] = -m[0]*m[5]*m[14] + m[0]*m[13]*m[6] + m[1]*m[4]*m[14] - m[1]*m[12]*m[6] - m[2]*m[4]*m[13] + m[2]*m[12]*m[5];
-  r[15] = m[0]*m[5]*m[10] - m[0]*m[9]*m[6] - m[1]*m[4]*m[10] + m[1]*m[8]*m[6] + m[2]*m[4]*m[9] - m[2]*m[8]*m[5];
-
-  var det = m[0]*r[0] + m[1]*r[4] + m[2]*r[8] + m[3]*r[12];
-  
-  if(det == 0){
-	  throw "inverse(): determinant was zero, this is a non-invertible matrix";
-  }
-  
-  for (var i = 0; i < 16; i++) r[i] /= det;
-  return transpose(mat4(r));
-};
 
 //----------------------------------------------------------------------------
 //
@@ -619,7 +566,7 @@ function dot( u, v )
 
 function negate( u )
 {
-    result = [];
+    var result = [];
     for ( var i = 0; i < u.length; ++i ) {
         result.push( -u[i] );
     }
@@ -639,7 +586,7 @@ function cross( u, v )
         throw "cross(): second argument is not a vector of at least 3";
     }
 
-    var result = [ 
+    var result = [
         u[1]*v[2] - u[2]*v[1],
         u[2]*v[0] - u[0]*v[2],
         u[0]*v[1] - u[1]*v[0]
@@ -658,17 +605,17 @@ function length( u )
 //----------------------------------------------------------------------------
 
 function normalize( u, excludeLastComponent )
-{ 
+{
     if ( excludeLastComponent ) {
         var last = u.pop();
     }
-    
+
     var len = length( u );
 
     if ( !isFinite(len) ) {
         throw "normalize: vector " + u + " has zero length";
     }
-    
+
     for ( var i = 0; i < u.length; ++i ) {
         u[i] /= len;
     }
@@ -676,7 +623,7 @@ function normalize( u, excludeLastComponent )
     if ( excludeLastComponent ) {
         u.push( last );
     }
-            
+
     return u;
 }
 
@@ -687,14 +634,14 @@ function mix( u, v, s )
     if ( typeof s !== "number" ) {
         throw "mix: the last paramter " + s + " must be a number";
     }
-    
+
     if ( u.length != v.length ) {
         throw "vector dimension mismatch";
     }
 
     var result = [];
     for ( var i = 0; i < u.length; ++i ) {
-        result.push( s * u[i] + (1.0 - s) * v[i] );
+        result.push( (1.0 - s) * u[i] + s * v[i] );
     }
 
     return result;
@@ -711,11 +658,11 @@ function scale( s, u )
         throw "scale: second parameter " + u + " is not a vector";
     }
 
-    result = [];
+    var result = [];
     for ( var i = 0; i < u.length; ++i ) {
         result.push( s * u[i] );
     }
-    
+
     return result;
 }
 
@@ -767,3 +714,276 @@ var sizeof = {
     'mat3' : new Float32Array( flatten(mat3()) ).byteLength,
     'mat4' : new Float32Array( flatten(mat4()) ).byteLength
 };
+
+// new functions 5/2/2015
+
+// printing
+
+function printm(m)
+{
+    if(m.length == 2)
+    for(var i=0; i<m.length; i++)
+       console.log(m[i][0], m[i][1]);
+    else if(m.length == 3)
+    for(var i=0; i<m.length; i++)
+       console.log(m[i][0], m[i][1], m[i][2]);
+    else if(m.length == 4)
+    for(var i=0; i<m.length; i++)
+       console.log(m[i][0], m[i][1], m[i][2], m[i][3]);
+}
+// determinants
+
+function det2(m)
+{
+
+     return m[0][0]*m[1][1]-m[0][1]*m[1][0];
+
+}
+
+function det3(m)
+{
+     var d = m[0][0]*m[1][1]*m[2][2]
+           + m[0][1]*m[1][2]*m[2][0]
+           + m[0][2]*m[2][1]*m[1][0]
+           - m[2][0]*m[1][1]*m[0][2]
+           - m[1][0]*m[0][1]*m[2][2]
+           - m[0][0]*m[1][2]*m[2][1]
+           ;
+     return d;
+}
+
+function det4(m)
+{
+     var m0 = [
+         vec3(m[1][1], m[1][2], m[1][3]),
+         vec3(m[2][1], m[2][2], m[2][3]),
+         vec3(m[3][1], m[3][2], m[3][3])
+     ];
+     var m1 = [
+         vec3(m[1][0], m[1][2], m[1][3]),
+         vec3(m[2][0], m[2][2], m[2][3]),
+         vec3(m[3][0], m[3][2], m[3][3])
+     ];
+     var m2 = [
+         vec3(m[1][0], m[1][1], m[1][3]),
+         vec3(m[2][0], m[2][1], m[2][3]),
+         vec3(m[3][0], m[3][1], m[3][3])
+     ];
+     var m3 = [
+         vec3(m[1][0], m[1][1], m[1][2]),
+         vec3(m[2][0], m[2][1], m[2][2]),
+         vec3(m[3][0], m[3][1], m[3][2])
+     ];
+     return m[0][0]*det3(m0) - m[0][1]*det3(m1)
+         + m[0][2]*det3(m2) - m[0][3]*det3(m3);
+
+}
+
+function det(m)
+{
+     if(m.matrix != true) console.log("not a matrix");
+     if(m.length == 2) return det2(m);
+     if(m.length == 3) return det3(m);
+     if(m.length == 4) return det4(m);
+}
+
+//---------------------------------------------------------
+
+// inverses
+
+function inverse2(m)
+{
+     var a = mat2();
+     var d = det2(m);
+     a[0][0] = m[1][1]/d;
+     a[0][1] = -m[0][1]/d;
+     a[1][0] = -m[1][0]/d;
+     a[1][1] = m[0][0]/d;
+     a.matrix = true;
+     return a;
+}
+
+function inverse3(m)
+{
+    var a = mat3();
+    var d = det3(m);
+
+    var a00 = [
+       vec2(m[1][1], m[1][2]),
+       vec2(m[2][1], m[2][2])
+    ];
+    var a01 = [
+       vec2(m[1][0], m[1][2]),
+       vec2(m[2][0], m[2][2])
+    ];
+    var a02 = [
+       vec2(m[1][0], m[1][1]),
+       vec2(m[2][0], m[2][1])
+    ];
+    var a10 = [
+       vec2(m[0][1], m[0][2]),
+       vec2(m[2][1], m[2][2])
+    ];
+    var a11 = [
+       vec2(m[0][0], m[0][2]),
+       vec2(m[2][0], m[2][2])
+    ];
+    var a12 = [
+       vec2(m[0][0], m[0][1]),
+       vec2(m[2][0], m[2][1])
+    ];
+    var a20 = [
+       vec2(m[0][1], m[0][2]),
+       vec2(m[1][1], m[1][2])
+    ];
+    var a21 = [
+       vec2(m[0][0], m[0][2]),
+       vec2(m[1][0], m[1][2])
+    ];
+    var a22 = [
+       vec2(m[0][0], m[0][1]),
+       vec2(m[1][0], m[1][1])
+    ];
+
+   a[0][0] = det2(a00)/d;
+   a[0][1] = -det2(a10)/d;
+   a[0][2] = det2(a20)/d;
+   a[1][0] = -det2(a01)/d;
+   a[1][1] = det2(a11)/d;
+   a[1][2] = -det2(a21)/d;
+   a[2][0] = det2(a02)/d;
+   a[2][1] = -det2(a12)/d;
+   a[2][2] = det2(a22)/d;
+
+   return a;
+
+}
+
+function inverse4(m)
+{
+    var a = mat4();
+    var d = det4(m);
+
+    var a00 = [
+       vec3(m[1][1], m[1][2], m[1][3]),
+       vec3(m[2][1], m[2][2], m[2][3]),
+       vec3(m[3][1], m[3][2], m[3][3])
+    ];
+    var a01 = [
+       vec3(m[1][0], m[1][2], m[1][3]),
+       vec3(m[2][0], m[2][2], m[2][3]),
+       vec3(m[3][0], m[3][2], m[3][3])
+    ];
+    var a02 = [
+       vec3(m[1][0], m[1][1], m[1][3]),
+       vec3(m[2][0], m[2][1], m[2][3]),
+       vec3(m[3][0], m[3][1], m[3][3])
+    ];
+    var a03 = [
+       vec3(m[1][0], m[1][1], m[1][2]),
+       vec3(m[2][0], m[2][1], m[2][2]),
+       vec3(m[3][0], m[3][1], m[3][2])
+    ];
+    var a10 = [
+       vec3(m[0][1], m[0][2], m[0][3]),
+       vec3(m[2][1], m[2][2], m[2][3]),
+       vec3(m[3][1], m[3][2], m[3][3])
+    ];
+    var a11 = [
+       vec3(m[0][0], m[0][2], m[0][3]),
+       vec3(m[2][0], m[2][2], m[2][3]),
+       vec3(m[3][0], m[3][2], m[3][3])
+    ];
+    var a12 = [
+       vec3(m[0][0], m[0][1], m[0][3]),
+       vec3(m[2][0], m[2][1], m[2][3]),
+       vec3(m[3][0], m[3][1], m[3][3])
+    ];
+    var a13 = [
+       vec3(m[0][0], m[0][1], m[0][2]),
+       vec3(m[2][0], m[2][1], m[2][2]),
+       vec3(m[3][0], m[3][1], m[3][2])
+    ];
+    var a20 = [
+       vec3(m[0][1], m[0][2], m[0][3]),
+       vec3(m[1][1], m[1][2], m[1][3]),
+       vec3(m[3][1], m[3][2], m[3][3])
+    ];
+    var a21 = [
+       vec3(m[0][0], m[0][2], m[0][3]),
+       vec3(m[1][0], m[1][2], m[1][3]),
+       vec3(m[3][0], m[3][2], m[3][3])
+    ];
+    var a22 = [
+       vec3(m[0][0], m[0][1], m[0][3]),
+       vec3(m[1][0], m[1][1], m[1][3]),
+       vec3(m[3][0], m[3][1], m[3][3])
+    ];
+    var a23 = [
+       vec3(m[0][0], m[0][1], m[0][2]),
+       vec3(m[1][0], m[1][1], m[1][2]),
+       vec3(m[3][0], m[3][1], m[3][2])
+    ];
+
+    var a30 = [
+       vec3(m[0][1], m[0][2], m[0][3]),
+       vec3(m[1][1], m[1][2], m[1][3]),
+       vec3(m[2][1], m[2][2], m[2][3])
+    ];
+    var a31 = [
+       vec3(m[0][0], m[0][2], m[0][3]),
+       vec3(m[1][0], m[1][2], m[1][3]),
+       vec3(m[2][0], m[2][2], m[2][3])
+    ];
+    var a32 = [
+       vec3(m[0][0], m[0][1], m[0][3]),
+       vec3(m[1][0], m[1][1], m[1][3]),
+       vec3(m[2][0], m[2][1], m[2][3])
+    ];
+    var a33 = [
+       vec3(m[0][0], m[0][1], m[0][2]),
+       vec3(m[1][0], m[1][1], m[1][2]),
+       vec3(m[2][0], m[2][1], m[2][2])
+    ];
+
+
+
+   a[0][0] = det3(a00)/d;
+   a[0][1] = -det3(a10)/d;
+   a[0][2] = det3(a20)/d;
+   a[0][3] = -det3(a30)/d;
+   a[1][0] = -det3(a01)/d;
+   a[1][1] = det3(a11)/d;
+   a[1][2] = -det3(a21)/d;
+   a[1][3] = det3(a31)/d;
+   a[2][0] = det3(a02)/d;
+   a[2][1] = -det3(a12)/d;
+   a[2][2] = det3(a22)/d;
+   a[2][3] = -det3(a32)/d;
+   a[3][0] = -det3(a03)/d;
+   a[3][1] = det3(a13)/d;
+   a[3][2] = -det3(a23)/d;
+   a[3][3] = det3(a33)/d;
+
+   return a;
+}
+function inverse(m)
+{
+   if(m.matrix != true) console.log("not a matrix");
+   if(m.length == 2) return inverse2(m);
+   if(m.length == 3) return inverse3(m);
+   if(m.length == 4) return inverse4(m);
+}
+
+function normalMatrix(m, flag)
+{
+    var a = mat4();
+    a = inverse(transpose(m));
+    if(flag != true) return a;
+    else {
+    var b = mat3();
+    for(var i=0;i<3;i++) for(var j=0; j<3; j++) b[i][j] = a[i][j];
+    return b;
+    }
+
+}

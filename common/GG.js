@@ -56,6 +56,20 @@ GG.nextRgb = function(){
 	return GG.hsv2Rgb(hue, 0.5, 0.95);
 };
 
+GG.hex2Rgb = function(hex) {
+	hex = hex.replace(/[^0-9A-F]/gi, '');
+    var bigint = parseInt(hex, 16);
+    var r = (bigint >> 16) & 255;
+    var g = (bigint >> 8) & 255;
+    var b = bigint & 255;
+    return new Float32Array([r/255.0, g/255.0, b/255.0, 1.0]);
+};
+
+GG.rgb2Hex = function(red, green, blue) {
+    var rgb = blue | (green << 8) | (red << 16);
+    return '#' + (0x1000000 + rgb).toString(16).slice(1)
+};
+
 GG.hsv2Rgb = function(h, s, v){
 	//from: http://stackoverflow.com/questions/17242144/javascript-convert-hsb-hsv-color-to-rgb-accurately
 	var r, g, b, i, f, p, q, t;
@@ -91,10 +105,11 @@ GG.rgbToInt = function(r, g, b){
 GG.shaderTypes = {vertex: "VERTEX", fragment: "FRAGMENT"};
 
 GG.simpleVertShader = "attribute vec4 vPosition;" +
-					  "uniform mat4 mvp;" +
-					  "uniform mat4 transform;" +
+					  "uniform mat4 m;" +
+					  "uniform mat4 v;" +
+					  "uniform mat4 p;" +
 					  "void main(){" +
-							"gl_Position = mvp * transform * vPosition;" +
+							"gl_Position = p * v* m * vPosition;" +
 					  "}";
 
 GG.simpleFragShader = "precision mediump float;" +
@@ -141,12 +156,12 @@ GG.initShaders = function initShaders( gl, vertShaderText, fragmentShaderText ){
 ///////////Camera///////////////
 ////////////////////////////////
 GG.camera = function(eye, camSpeed, projection){
-	this.eye = (eye != null && Array.isArray(eye)) ? eye : [0,0,-5];
+	this.eye = (eye != null && Array.isArray(eye)) ? eye : [0,-3,-5];
 	this.camSpeed = (camSpeed != null && typeof camSpeed == "number") ? camSpeed : 0.02;
 	this.rotSpeed = 2;
 	this.projection = (Array.isArray(projection) && projection.length == 16) ? projection : perspective(90, 1, 0.5, 100);
 	//rotation around x
-	this.pitch = 0;
+	this.pitch = 20;
 	//rotation around y
 	this.yaw = 0;
 	this.update();
@@ -155,18 +170,21 @@ GG.camera = function(eye, camSpeed, projection){
 GG.camera.prototype.update = function(){
 	var rot = mult( rotate(this.pitch, [1,0,0]), rotate(this.yaw, [0,1,0]) );
 	var trans = translate(this.eye[0], this.eye[1], this.eye[2]);
-	var m = mult(rot, trans);
-	var out = mult(this.projection, m);
-	this.mvp = flatten(out);
+	var v = mult(rot, trans);
+	this.v = v;
 };
 
-GG.camera.prototype.getMVP = function(){
-	return this.mvp;
+GG.camera.prototype.getV = function(){
+	return flatten(this.v);
+};
+
+GG.camera.prototype.getP = function(){
+	return flatten(this.projection);
 };
 
 GG.camera.prototype.unproject = function(x,y,z){
 	  // Compute the inverse of the perspective x model-view matrix.
-	  var iMVP = inverse(this.mvp);
+	  var iMVP = inverse(mult(this.p, this.v));
 	  var normalisedClick = vec4(x,y,z,1);
 	  //take click in clip coordinates to perspective x model-view coordinates.
 	  var forward = mult(iMVP, normalisedClick);
@@ -208,11 +226,64 @@ GG.scene = function(){
 	this.renderables = {};
 	this.camera = new GG.camera();
 	this.initialised = false;
+	this.pickTexture = null;
+	this.pickBuffer = null;
+	this.pickDepthBuffer = null;
+	this.lights = [ new GG.pointLight(), new GG.pointLight() ];
 	//a method passed to renderables to bind them to the scene
 	var that = this;
-	this.bindToScene = function(gl, shaderProgram){
-		var uMVP = gl.getUniformLocation(shaderProgram, "mvp");
-		gl.uniformMatrix4fv(uMVP, false, that.camera.getMVP());
+	this.bindToScene = function(gl, renderable){
+		
+		var shaderProgram = (renderable.useUnlit) ? renderable.unlitShader : renderable.shaderProgram;
+		var p = that.camera.projection;
+		var v = that.camera.v;
+		var m = renderable.transform;
+		
+		//pass eye and projection matrices
+		var uView = gl.getUniformLocation(shaderProgram, "v");
+		gl.uniformMatrix4fv(uView, false, flatten(v));
+		
+		var uProj = gl.getUniformLocation(shaderProgram, "p");
+		gl.uniformMatrix4fv(uProj, false, flatten(p));
+		
+		var uModel = gl.getUniformLocation(shaderProgram, "m");
+		gl.uniformMatrix4fv(uModel, false, flatten(m));
+		
+		if(!renderable.useUnlit){
+			var uNormalMatrix = gl.getUniformLocation(shaderProgram, "normalMatrix");
+			var nMatrix = normalMatrix(mult(v,m));
+			gl.uniformMatrix4fv(uNormalMatrix, false, flatten(nMatrix));
+			
+			//pass lights
+			for(var i = 0; i < that.lights.length; i++){
+				var light = that.lights[i];
+				var prefix = "lights[" + i + "].";
+				
+				var uLightEnabled = gl.getUniformLocation(shaderProgram, prefix + "enabled");
+				gl.uniform1i(uLightEnabled, light.enabled);
+				
+				var uLightPos = gl.getUniformLocation(shaderProgram, prefix + "position");
+				gl.uniform4fv(uLightPos, light.position);
+				
+				var uLightAmbient = gl.getUniformLocation(shaderProgram, prefix + "ambient");
+				gl.uniform4fv(uLightAmbient, light.ambient);
+				
+				var uLightDiffuse = gl.getUniformLocation(shaderProgram, prefix + "diffuse");
+				gl.uniform4fv(uLightDiffuse, light.diffuse);
+				
+				var uLightSpecular = gl.getUniformLocation(shaderProgram, prefix + "specular");
+				gl.uniform4fv(uLightSpecular, light.specular);
+				
+				var uLightConstantAtt = gl.getUniformLocation(shaderProgram, prefix + "constantAttenuation");
+				gl.uniform1f(uLightConstantAtt, light.constantAttenuation);
+				
+				var uLightLinearAtt = gl.getUniformLocation(shaderProgram, prefix + "linearAttenuation");
+				gl.uniform1f(uLightLinearAtt, light.linearAttenuation);
+				
+				var uLightQuadraticAtt = gl.getUniformLocation(shaderProgram, prefix + "quadraticAttenuation");
+				gl.uniform1f(uLightQuadraticAtt, light.quadraticAttenuation);
+			}
+		}
 	};
 };
 
@@ -229,10 +300,51 @@ GG.scene.prototype.init = function(gl){
 	gl.frontFace(gl.CCW);
 };
 
-GG.scene.prototype.pick = function(gl, x, y){
+GG.scene.prototype.pick = function(gl, x, y, width, height){
+	
+	//initialise pick texture and buffer
+	if(this.pickBuffer == null || this.pickTexture == null){
+		this.pickTexture = gl.createTexture();
+		this.pickBuffer = gl.createFramebuffer();
+		this.pickDepthBuffer = gl.createRenderbuffer();
+		// Create a framebuffer and 
+	}
+	
+	//bind pick buffer and texture
+	gl.bindFramebuffer(gl.FRAMEBUFFER, this.pickBuffer);
+	gl.bindRenderbuffer(gl.RENDERBUFFER, this.pickDepthBuffer);
+	gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, width, height);
+	gl.activeTexture(gl.TEXTURE0);
+	gl.bindTexture(gl.TEXTURE_2D, this.pickTexture);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+	gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+	gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, width, height, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+	//attach the texture to the pick buffer, and set-up pick depth buffer
+	gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.pickTexture, 0);
+	gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.pickDepthBuffer);
+	
 	var pixels = new Uint8Array(4);
+	
+	//make them all use unlit shader
+	for(var key in this.renderables){
+		var toRender = this.renderables[key];
+		toRender.useUnlit = true;
+	}
+	
 	this.render(gl);
 	gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+	
+	//unbind from frame-buffer and pick depth buffer so we can do normal rendering
+	gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+	gl.bindRenderbuffer(gl.RENDERBUFFER, null);
+	gl.bindTexture(gl.TEXTURE_2D, null);
+	
+	//revert to using lit shader
+	for(var key in this.renderables){
+		var toRender = this.renderables[key];
+		toRender.useUnlit = false;
+	}
+	
 	var rgbInt = GG.rgbToInt(pixels[0], pixels[1], pixels[2]);
 	if(rgbInt in this.renderables){
 		return this.renderables[rgbInt];
@@ -278,34 +390,60 @@ GG.scene.prototype.addRenderable = function(renderable){
 };
 
 ////////////////////////////////
+//////////Material//////////////
+////////////////////////////////
+GG.material = function(){
+	this.ambient = new Float32Array([1.0, 0.0, 1.0, 1.0]);
+	this.diffuse = new Float32Array([1.0, 0.8, 0.0, 1.0]);
+	this.specular = new Float32Array([0.8, 0.8, 0.8, 1.0]);
+	this.shininess = 5;
+};
+
+////////////////////////////////
+//////////LIGHTS////////////////
+////////////////////////////////
+GG.pointLight = function(){
+	this.enabled = true;
+	this.position = new Float32Array([1.0, 1.0, 1.0, 1.0]);
+	this.ambient = new Float32Array([0.2, 0.2, 0.2, 1.0]);
+	this.diffuse = new Float32Array([1.0, 1.0, 1.0, 1.0]);
+	this.specular = new Float32Array([1.0, 1.0, 1.0, 1.0]);
+	this.constantAttenuation = 0; 
+	this.linearAttenuation = 0.731;
+	this.quadraticAttenuation = 0;
+};
+
+////////////////////////////////
 //////////Node//////////////////
 ////////////////////////////////
 GG.node = function(transform){
 	if(!Array.isArray(transform)){
 		//just use identity matrix
-		transform = flatten(mat4(1));
+		transform = mat4(1);
 	}
 	this.transform = transform;
 };
 
 GG.node.prototype.getTransform = function(){
-	return this.transform;
+	return flatten(this.transform);
 };
 
 GG.node.prototype.getTranslation = function(){
-	return [this.transform[12], this.transform[13], this.transform[14]];
+	var transform = this.getTransform();
+	return [transform[12], transform[13], transform[14]];
 };
 
 GG.node.prototype.getScale = function(){
-	var x = length([this.transform[0], this.transform[1], this.transform[2]]);
-	var y = length([this.transform[4], this.transform[5], this.transform[6]]);
-	var z = length([this.transform[8], this.transform[9], this.transform[10]]);
+	var transform = this.getTransform();
+	var x = length([transform[0], transform[1], transform[2]]);
+	var y = length([transform[4], transform[5], transform[6]]);
+	var z = length([transform[8], transform[9], transform[10]]);
 	return [x,y,z];
 };
 
 GG.node.prototype.getRotation = function(){
 	var scale = this.getScale();
-	var m = this.transform;
+	var m = this.getTransform();
 	
 	//un-scale the transformation matrix
 	var r11 = m[0]/scale[0];
@@ -344,12 +482,13 @@ GG.renderable = function(vertShaderId, fragShaderId, transform){
 	GG.node.apply(this, [transform]);
 	this.vertShaderText = GG.getShaderText(vertShaderId, GG.shaderTypes.vertex);
 	this.fragShaderText = GG.getShaderText(fragShaderId, GG.shaderTypes.fragment);
-	//-1 bufferId and null shaderProgram indicates it is uninitialised
-	this.bufferId = -1;
+	//-1 vBufferId and null shaderProgram indicates it is uninitialised
+	this.vBufferId = -1;
 	this.shaderProgram = null;
+	this.material = new GG.material();
+	this.unlitShader = null;
+	this.useUnlit = false;
 	this.color = new Float32Array([0.4, 0.4, 0.4, 1.0]);
-	this.drawOutline = false;
-	this.outlineColor = new Float32Array([0, 0, 0, 1.0]);
 	this.initialised = false;
 	this.faces = 0;
 	this.vertsPerFace = 3;
@@ -361,7 +500,14 @@ GG.renderable.prototype.useShader = function(gl){
 	if(this.shaderProgram == null){
 		this.shaderProgram = GG.initShaders(gl, this.vertShaderText, this.fragShaderText);
 	}
-	gl.useProgram(this.shaderProgram);
+	if(this.useUnlit && this.unlitShader == null){
+		this.unlitShader = GG.initShaders(gl, GG.simpleVertShader, GG.simpleFragShader);
+	}
+	if(this.useUnlit){
+		gl.useProgram(this.unlitShader);
+	}else{
+		gl.useProgram(this.shaderProgram);
+	}
 };
 
 GG.renderable.prototype.initialise = function(gl){
@@ -369,21 +515,47 @@ GG.renderable.prototype.initialise = function(gl){
 };
 
 GG.renderable.prototype.bind = function(gl, outlineMode){
-	gl.bindBuffer(gl.ARRAY_BUFFER, this.bufferId);
-	var vPosition = gl.getAttribLocation( this.shaderProgram, "vPosition" );
+	
+	var shaderProgram = (this.useUnlit) ? this.unlitShader : this.shaderProgram;
+	
+	//VERTEX BUFFER
+	if(this.vBufferId == -1){
+		this.vBufferId = gl.createBuffer();
+	}
+	gl.bindBuffer(gl.ARRAY_BUFFER, this.vBufferId);
+	var vPosition = gl.getAttribLocation(shaderProgram, "vPosition");
 	//set-up pointer for vertexPosition
-	gl.vertexAttribPointer( vPosition, 3, gl.FLOAT, false, 0, 0);
+	gl.vertexAttribPointer( vPosition, 3, gl.FLOAT, false, GG.SIZE_OF_FLOAT * 6, 0);
 	gl.enableVertexAttribArray( vPosition );
-	//set-transform
-	var uTransform = gl.getUniformLocation(this.shaderProgram, "transform");
-	gl.uniformMatrix4fv(uTransform, false, this.transform);
-	//set-up the colour location
-	var uColor = gl.getUniformLocation(this.shaderProgram, "uColor");
-	//depends whether we are drawing the poly or the outline
-	gl.uniform4fv(uColor, (outlineMode) ? this.outlineColor : this.color);
+	
+	//unlit shader
+	if(this.useUnlit){
+		//use this color for picking most likely
+		var uColor = gl.getUniformLocation(shaderProgram, "uColor");
+		gl.uniform4fv(uColor, this.color);
+	}
+	//lit shader
+	else{
+		//NORMAL data is interleaved with vertex data in the buffer, {vx,vy,vz,nx,ny,nz...etc}
+		var vNormal = gl.getAttribLocation( shaderProgram, "vNormal" );
+		//set-up pointer for vertex normal in shader
+		gl.vertexAttribPointer( vNormal, 3, gl.FLOAT, false, GG.SIZE_OF_FLOAT * 6, GG.SIZE_OF_FLOAT * 3);
+		gl.enableVertexAttribArray( vNormal );
+		
+		//set up frontMaterial
+		var uAmbient = gl.getUniformLocation( shaderProgram, "frontMaterial.ambient" );
+		gl.uniform4fv(uAmbient, this.material.ambient);
+		
+		var uDiffuse = gl.getUniformLocation( shaderProgram, "frontMaterial.diffuse" );
+		gl.uniform4fv(uDiffuse, this.material.diffuse);
+		
+		var uSpecular = gl.getUniformLocation( shaderProgram, "frontMaterial.specular" );
+		gl.uniform4fv(uSpecular, this.material.specular);
+		
+		var uShininess = gl.getUniformLocation( shaderProgram, "frontMaterial.shininess" );
+		gl.uniform1f(uShininess, this.material.shininess);
+	}
 };
-
-GG.renderable.prototype.bindFor
 
 GG.renderable.prototype.draw = function(gl, outlineMode){
 	for(var face = 0; face < this.faces; face++){
@@ -398,31 +570,48 @@ GG.renderable.prototype.draw = function(gl, outlineMode){
 
 GG.renderable.prototype.render = function(gl){
 	this.useShader(gl);
-	//if not initialised, initialise the buffer
-	if(this.bufferId == -1){
-		this.bufferId = gl.createBuffer();
-	}
 	this.bind(gl, false);
 	//if scene binding has been passed in
 	if("bindToScene" in this){
-		this.bindToScene(gl, this.shaderProgram);
+		this.bindToScene(gl, this);
 	}
 	if(!this.initialised){
 		this.initialise(gl);
 		this.initialised = true;
 	}
 	this.draw(gl, false);
-	
-	//then draw outline, requires rebind and second draw call
-	if(this.drawOutline){
-		this.bind(gl, true);
-		this.draw(gl, true);
-	}
 };
 
 ////////////////////////////////
 ////////SHAPE FACTORY///////////
 ////////////////////////////////
+
+//plane
+GG.plane = function(vertShaderId, fragShaderId, transform){
+	GG.renderable.apply(this, arguments);
+	this.rowsCols = 10;
+	this.faces = this.rowsCols * this.rowsCols;
+	this.vertsPerFace = 4;
+	this.name = "plane";
+};
+GG.isA(GG.plane, GG.renderable);
+
+//plane
+GG.plane.prototype.initialise = function(gl){
+	var normal = [0,1,0];
+	var data = [];
+	var cellSize = 1.0/this.rowsCols;
+	for(var x = -0.5; x < 0.5; x += cellSize){
+		for(var z = -0.5; z < 0.5; z += cellSize){
+			var v1 = [x,0,z];
+			var v2 = [x+cellSize,0,z];
+			var v3 = [x+cellSize,0,z+cellSize];
+			var v4 = [x,0,z+cellSize];
+			data = data.concat(v4, normal, v3, normal, v2, normal, v1, normal);
+		}
+	}
+	gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW );
+};
 
 //cube
 GG.cube = function(vertShaderId, fragShaderId, transform){
@@ -435,14 +624,14 @@ GG.isA(GG.cube, GG.renderable);
 
 GG.cube.prototype.initialise = function(gl){
 	var verts = [[-1,-1,-1],[1,-1,-1],[1,1,-1],[-1,1,-1],[1,-1,1],[-1,-1,1],[-1,1,1],[1,1,1]];
-	//36 vertices because we draw each triangle redundantly (using gl.TRIANGLES)
+	var normals = [ [0,0,-1], [0,0,1], [1,0,0], [-1,0,0], [0,1,0], [0,-1,0] ];
 	var cubeVerts = new Float32Array([].concat(
-		verts[3], verts[2], verts[1], verts[0], //front
-		verts[7], verts[6], verts[5], verts[4], //back
-		verts[2], verts[7], verts[4], verts[1], //right
-		verts[6], verts[3], verts[0], verts[5], //left
-		verts[6], verts[7], verts[2], verts[3], //top
-		verts[0], verts[1], verts[4], verts[5] //bottom 
+		verts[3], normals[0], verts[2], normals[0], verts[1], normals[0], verts[0], normals[0], //front
+		verts[7], normals[1], verts[6], normals[1], verts[5], normals[1], verts[4], normals[1], //back
+		verts[2], normals[2], verts[7], normals[2], verts[4], normals[2], verts[1], normals[2], //right
+		verts[6], normals[3], verts[3], normals[3], verts[0], normals[3], verts[5], normals[3],//left
+		verts[6], normals[4], verts[7], normals[4], verts[2], normals[4], verts[3], normals[4], //top
+		verts[0], normals[5], verts[1], normals[5], verts[4], normals[5], verts[5], normals[5] //bottom 
 	));
 	gl.bufferData( gl.ARRAY_BUFFER, cubeVerts, gl.STATIC_DRAW );
 };
@@ -461,8 +650,9 @@ GG.cone.prototype.initialise = function(gl){
 	//top of cone
 	var angleIncrement = 360/this.divisions;
 	
-	var addVert = function(vert){
-		data = data.concat(vert);
+	var addTri = function(v1, v2, v3){
+		var normal = normalize( cross(subtract(v2, v1), subtract(v3, v1)) );
+		data = data.concat(v1, normal, v2, normal, v3, normal);
 	};
 	
 	for(var part = 0; part < 2; part++){
@@ -474,18 +664,13 @@ GG.cone.prototype.initialise = function(gl){
 			var edge = [Math.cos(theta),1,Math.sin(theta)];
 			var edge2 = [Math.cos(theta2),1,Math.sin(theta2)];
 			if(part == 0){
-				addVert(mid);
-				addVert(edge);
-				addVert(edge2);
+				addTri(mid, edge, edge2);
 			}else{
-				addVert(mid);
-				addVert(edge2);
-				addVert(edge);
+				addTri(mid, edge2, edge);
 			}
-			
 		}
 	}
-	this.faces = data.length/9;
+	this.faces = data.length/ (3 * this.vertsPerFace * 2);
 	gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW );
 };
 
@@ -502,8 +687,9 @@ GG.cylinder.prototype.initialise = function(gl){
 	var data = [];
 	var angleIncrement = 360/this.divisions;
 	
-	var addVert = function(vert){
-		data = data.concat(vert);
+	var addTri = function(v1, v2, v3){
+		var normal = normalize( cross(subtract(v2, v1), subtract(v3, v1)) );
+		data = data.concat(v1, normal, v2, normal, v3, normal);
 	};
 
 	var top = [0, 1, 0];
@@ -511,7 +697,6 @@ GG.cylinder.prototype.initialise = function(gl){
 	
 	//do top first
 	for(var angle = 0; angle < 360; angle += angleIncrement){
-		addVert(top);
 		var theta1 = radians(angle);
 		var theta2 = radians(angle + angleIncrement);
 		//note we don't do r * cos(a), because we assume radius is 1
@@ -519,23 +704,16 @@ GG.cylinder.prototype.initialise = function(gl){
 		var topedge2 = [Math.cos(theta2),1,Math.sin(theta2)];
 		var botedge1 = [topedge1[0], 0, topedge1[2]];
 		var botedge2 = [topedge2[0], 0, topedge2[2]];
-		addVert(topedge2);
-		addVert(topedge1);
+		addTri(top, topedge2, topedge1);
 		//go down
-		addVert(topedge2);
-		addVert(botedge2);
-		addVert(botedge1);
+		addTri(topedge2, botedge2, botedge1);
 		//bottom
-		addVert(botedge2);
-		addVert(bottom);
-		addVert(botedge1);
+		addTri(botedge2, bottom, botedge1);
 		//go back up
-		addVert(botedge1);
-		addVert(topedge1);
-		addVert(topedge2);
+		addTri(botedge1, topedge1, topedge2);
 	}
 	
-	this.faces = data.length/9;
+	this.faces = data.length/ (3 * this.vertsPerFace * 2);
 	gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW );
 };
 
@@ -571,16 +749,15 @@ GG.sphere.prototype.initialise = function(gl){
 			var sPhi2 = Math.sin(phi2);
 			var cPhi1 = Math.cos(phi1);
 			var cPhi2 = Math.cos(phi2);
-			
-			data = data.concat(cTheta1 * cPhi2, cTheta1 * sPhi2, sTheta1);
-			data = data.concat(cTheta2 * cPhi2, cTheta2 * sPhi2, sTheta2);
-			data = data.concat(cTheta2 * cPhi1, cTheta2 * sPhi1, sTheta2);
-			data = data.concat(cTheta1 * cPhi1, cTheta1 * sPhi1, sTheta1);
-			
+			var v1 = [cTheta1 * cPhi2, cTheta1 * sPhi2, sTheta1];
+			var v2 = [cTheta2 * cPhi2, cTheta2 * sPhi2, sTheta2];
+			var v3 = [cTheta2 * cPhi1, cTheta2 * sPhi1, sTheta2];
+			var v4 = [cTheta1 * cPhi1, cTheta1 * sPhi1, sTheta1];
+			data = data.concat(v1, normalize(v1), v2, normalize(v2), v3, normalize(v3), v4, normalize(v4));
        }
     }
 	
-	this.faces = data.length/12;
+	this.faces = data.length/ (3 * this.vertsPerFace * 2);
 	gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW );
 };
 
