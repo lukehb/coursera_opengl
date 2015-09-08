@@ -229,7 +229,7 @@ GG.scene = function(){
 	this.pickTexture = null;
 	this.pickBuffer = null;
 	this.pickDepthBuffer = null;
-	this.lights = [ new GG.pointLight(), new GG.pointLight() ];
+
 	//a method passed to renderables to bind them to the scene
 	var that = this;
 	this.bindToScene = function(gl, renderable){
@@ -393,10 +393,69 @@ GG.scene.prototype.addRenderable = function(renderable){
 //////////Material//////////////
 ////////////////////////////////
 GG.material = function(){
-	this.ambient = new Float32Array([1.0, 0.0, 1.0, 1.0]);
+	this.ambient = new Float32Array([1.0, 1.0, 1.0, 1.0]);
 	this.diffuse = new Float32Array([1.0, 0.8, 0.0, 1.0]);
 	this.specular = new Float32Array([0.8, 0.8, 0.8, 1.0]);
 	this.shininess = 5;
+};
+
+////////////////////////////////
+/////TEXTURE MANAGER////////////
+////////////////////////////////
+GG.textureManager = function(){
+	this.curTexUnit = 0;
+};
+
+GG.textureManager.prototype.requestTexUnit = function(){
+	var toReturn = this.curTexUnit;
+	this.curTexUnit++;
+	return toReturn;
+};
+
+GG.textureManager.prototype.resolveTextureUnit = function(gl, texUnit){
+	var glTexUnit = "gl.TEXTURE" + texUnit;
+	return eval(glTexUnit);
+};
+
+////////////////////////////////
+//////////TEXTURE///////////////
+////////////////////////////////
+GG.texture = function(image, width, height){
+	this.tmpImage = image;
+	this.width = width;
+	this.height = height;
+	this.tex = null;
+	this.texUnit = null;
+};
+
+GG.texture.prototype.init = function(gl){
+	this.tex = gl.createTexture();
+	gl.bindTexture( gl.TEXTURE_2D, this.tex );
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+	if(this.tmpImage instanceof Uint8Array){ //procedurally generated
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, this.tmpImage);
+	}else{ //image or element
+		gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, this.tmpImage);
+	}
+    gl.generateMipmap( gl.TEXTURE_2D );
+    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST_MIPMAP_LINEAR );
+    gl.texParameteri( gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+	gl.bindTexture( gl.TEXTURE_2D, null );
+	this.tmpImage = null;
+};
+
+GG.texture.prototype.bind = function(gl, textureManager){
+	if(this.tex == null){
+		if(this.tmpImage == null){
+			throw "Texture must have image assigned to it.";
+		}
+		this.init(gl);
+	}
+	if(this.texUnit == null){
+		this.texUnit = textureManager.requestTexUnit();
+	}
+	gl.activeTexture( textureManager.resolveTextureUnit(gl, this.texUnit) );
+	gl.bindTexture( gl.TEXTURE_2D, this.tex );
 };
 
 ////////////////////////////////
@@ -490,6 +549,8 @@ GG.renderable = function(vertShaderId, fragShaderId, transform){
 	this.useUnlit = false;
 	this.color = new Float32Array([0.4, 0.4, 0.4, 1.0]);
 	this.initialised = false;
+	this.textureManager = new GG.textureManager();
+	this.textures = [];
 	this.faces = 0;
 	this.vertsPerFace = 3;
 }; 
@@ -525,7 +586,7 @@ GG.renderable.prototype.bind = function(gl, outlineMode){
 	gl.bindBuffer(gl.ARRAY_BUFFER, this.vBufferId);
 	var vPosition = gl.getAttribLocation(shaderProgram, "vPosition");
 	//set-up pointer for vertexPosition
-	gl.vertexAttribPointer( vPosition, 3, gl.FLOAT, false, GG.SIZE_OF_FLOAT * 6, 0);
+	gl.vertexAttribPointer( vPosition, 3, gl.FLOAT, false, GG.SIZE_OF_FLOAT * 8, 0);
 	gl.enableVertexAttribArray( vPosition );
 	
 	//unlit shader
@@ -539,7 +600,7 @@ GG.renderable.prototype.bind = function(gl, outlineMode){
 		//NORMAL data is interleaved with vertex data in the buffer, {vx,vy,vz,nx,ny,nz...etc}
 		var vNormal = gl.getAttribLocation( shaderProgram, "vNormal" );
 		//set-up pointer for vertex normal in shader
-		gl.vertexAttribPointer( vNormal, 3, gl.FLOAT, false, GG.SIZE_OF_FLOAT * 6, GG.SIZE_OF_FLOAT * 3);
+		gl.vertexAttribPointer( vNormal, 3, gl.FLOAT, false, GG.SIZE_OF_FLOAT * 8, GG.SIZE_OF_FLOAT * 3);
 		gl.enableVertexAttribArray( vNormal );
 		
 		//set up frontMaterial
@@ -554,6 +615,23 @@ GG.renderable.prototype.bind = function(gl, outlineMode){
 		
 		var uShininess = gl.getUniformLocation( shaderProgram, "frontMaterial.shininess" );
 		gl.uniform1f(uShininess, this.material.shininess);
+		
+		//textures
+		if(this.textures.length > 0){
+			//texture coords
+			var vTexCoord = gl.getAttribLocation( shaderProgram, "vTexCoord" );
+			//set-up pointer for vertex normal in shader
+			gl.vertexAttribPointer( vTexCoord, 2, gl.FLOAT, false, GG.SIZE_OF_FLOAT * 8, GG.SIZE_OF_FLOAT * 6);
+			gl.enableVertexAttribArray( vTexCoord );
+			//texture uniforms for texture units
+			var uTexPrefix = "Tex";
+			for(var i = 0; i < this.textures.length; i++){
+				var texture = this.textures[i];
+				texture.bind(gl, this.textureManager);
+				gl.uniform1i(gl.getUniformLocation( shaderProgram, uTexPrefix + texture.texUnit), texture.texUnit);
+			}
+		}
+		
 	}
 };
 
@@ -599,6 +677,7 @@ GG.isA(GG.plane, GG.renderable);
 //plane
 GG.plane.prototype.initialise = function(gl){
 	var normal = [0,1,0];
+	var tiling = 10.0;
 	var data = [];
 	var cellSize = 1.0/this.rowsCols;
 	for(var x = -0.5; x < 0.5; x += cellSize){
@@ -607,7 +686,12 @@ GG.plane.prototype.initialise = function(gl){
 			var v2 = [x+cellSize,0,z];
 			var v3 = [x+cellSize,0,z+cellSize];
 			var v4 = [x,0,z+cellSize];
-			data = data.concat(v4, normal, v3, normal, v2, normal, v1, normal);
+			data = data.concat(
+				v4, normal, [v4[0]*tiling, v4[2]*tiling],
+				v3, normal, [v3[0]*tiling, v3[2]*tiling],
+				v2, normal, [v2[0]*tiling, v2[2]*tiling],
+				v1, normal, [v1[0]*tiling, v1[2]*tiling]
+			);
 		}
 	}
 	gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW );
@@ -678,7 +762,7 @@ GG.cone.prototype.initialise = function(gl){
 //cylinder
 GG.cylinder = function(vertShaderId, fragShaderId, transform){
 	GG.renderable.apply(this, arguments);
-	this.divisions = 12;
+	this.divisions = 15;
 	this.name = "cylinder";
 };
 GG.isA(GG.cylinder, GG.renderable);
@@ -720,17 +804,22 @@ GG.cylinder.prototype.initialise = function(gl){
 //sphere
 GG.sphere = function(vertShaderId, fragShaderId, transform){
 	GG.renderable.apply(this, arguments);
-	this.divisions = 12;
+	this.divisions = 13;
 	this.vertsPerFace = 4;
 	this.name = "sphere";
+	this.uvProjection = GG.sphere.UVProjections.SPHERICAL;
 };
 GG.isA(GG.sphere, GG.renderable);
 
+GG.sphere.UVProjections = {
+	PLANAR : "PLANAR",
+	SPHERICAL : "SPHERICAL"
+};
 
 GG.sphere.prototype.initialise = function(gl){
 	var data = [];
-	
-    var dtheta = 180/this.divisions;
+	var that = this;
+	var dtheta = 180/this.divisions;
 	var dphi = 360/this.divisions;
 	var latitude = 90;
 	var longitude = 360;
@@ -753,14 +842,33 @@ GG.sphere.prototype.initialise = function(gl){
 			var v2 = [cTheta2 * cPhi2, cTheta2 * sPhi2, sTheta2];
 			var v3 = [cTheta2 * cPhi1, cTheta2 * sPhi1, sTheta2];
 			var v4 = [cTheta1 * cPhi1, cTheta1 * sPhi1, sTheta1];
-			data = data.concat(v1, normalize(v1), v2, normalize(v2), v3, normalize(v3), v4, normalize(v4));
+			var polar = (this.uvProjection == GG.sphere.UVProjections.POLAR);
+			var uv1 = (polar) ? [theta1 / (2 * Math.PI), phi2 / Math.PI] : this.generateUVs(v1);
+			var uv2 = (polar) ? [theta2 / (2 * Math.PI), phi2 / Math.PI] : this.generateUVs(v2);
+			var uv3 = (polar) ? [theta2 / (2 * Math.PI), phi1 / Math.PI] : this.generateUVs(v3);
+			var uv4 = (polar) ? [theta1 / (2 * Math.PI), phi1 / Math.PI] : this.generateUVs(v4);
+			data = data.concat(
+						v1, normalize(v1), uv1,
+						v2, normalize(v2), uv2,
+						v3, normalize(v3), uv3,
+						v4, normalize(v4), uv4
+			);
        }
     }
 	
-	this.faces = data.length/ (3 * this.vertsPerFace * 2);
+	//8 because [x,y,z,nx,ny.nz,u,v]
+	this.faces = data.length/ (8 * this.vertsPerFace);
 	gl.bufferData( gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW );
 };
 
+GG.sphere.prototype.generateUVs = function(vert){
+	if(this.uvProjection == GG.sphere.UVProjections.PLANAR){
+		return [vert[0], vert[2]];
+	}
+	else if(this.uvProjection == GG.sphere.UVProjections.SPHERICAL){
+		return [ Math.atan2(vert[2], vert[0]) / (2.0 * Math.PI) + 0.5, 0.5 - Math.asin(vert[1])/Math.PI ];
+	}
+};
 
 
 

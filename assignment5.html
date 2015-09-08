@@ -1,0 +1,256 @@
+<html>
+<meta charset="UTF-8">
+	<head>
+		<script id="vertex-shader" type="x-shader/x-vertex">
+			attribute vec4 vPosition;
+			attribute vec3 vNormal;
+			attribute vec2 vTexCoord;
+			
+			varying vec3 fPosition;
+			varying vec3 fNormal;
+			varying vec2 fTexCoord;
+			
+			uniform mat4 m;
+			uniform mat4 v;
+			uniform mat4 p;
+			uniform mat4 normalMatrix;		
+			
+			void main(){
+				mat4 mv = v * m;
+				fPosition = vec3(mv * vPosition);
+				vec4 NN = vec4(vNormal, 0.0);
+				fNormal = normalize(vec3(normalMatrix * NN));
+				mat4 mvp = p*mv;
+				fTexCoord = vTexCoord;
+				gl_Position = mvp * vPosition;
+			}
+		</script>
+		<script id="fragment-shader" type="x-shader/x-fragment">
+			precision mediump float;
+			
+			varying vec3 fPosition;
+			varying vec3 fNormal;
+			varying vec2 fTexCoord;
+			
+			uniform sampler2D Tex0;
+			
+			const vec4 globalAmbient = vec4(0.2, 0.2, 0.2, 1.0);
+			
+			struct lightSource
+			{
+			  bool enabled;
+			  vec4 position;
+			  vec4 ambient;
+			  vec4 diffuse;
+			  vec4 specular;
+			  float constantAttenuation, linearAttenuation, quadraticAttenuation;
+			};
+			
+			const int numberOfLights = 1;
+			uniform lightSource lights[numberOfLights];
+			 
+			struct material
+			{
+			  vec4 ambient;
+			  vec4 diffuse;
+			  vec4 specular;
+			  float shininess;
+			};
+			
+			uniform material frontMaterial;
+			
+			void main(){
+				// initialize total lighting with ambient lighting
+				vec3 totalLighting = vec3(globalAmbient) * vec3(frontMaterial.ambient);
+				vec3 pos = fPosition;
+	
+				for (int i = 0; i < numberOfLights; i++) // for all light sources
+				{
+					if(lights[i].enabled){
+						//fixed light postion
+						vec4 lightPosition = lights[i].position;
+						vec3 positionToLight = lightPosition.xyz - pos;
+						float distance = length(positionToLight);
+						
+						float attenuation = lights[i].constantAttenuation + 
+											lights[i].linearAttenuation * distance + 
+											lights[i].quadraticAttenuation * distance * distance;
+						
+						vec3 L;
+						if(lightPosition.w == 0.0){
+							L = normalize(lightPosition.xyz);
+						} else{
+							L = normalize( positionToLight );
+						} 
+						
+						vec3 E = normalize(-pos);
+						vec3 H = normalize( L + E );
+						// Transform vertex normal into eye coordinates 
+						vec3 N = fNormal;
+
+						// Compute terms in the illumination equation
+						vec4 ambient = lights[i].ambient * frontMaterial.ambient;
+
+						float Kd = max( dot(L, N), 0.0 );
+						vec4  diffuse = Kd * lights[i].diffuse * frontMaterial.diffuse;
+
+						float Ks = pow( max(dot(N, H), 0.0), frontMaterial.shininess );
+						vec4  specular = Ks * lights[i].specular * frontMaterial.specular;
+						
+						if( dot(L, N) < 0.0 ) {
+							specular = vec4(0.0, 0.0, 0.0, 1.0);
+						} 
+						totalLighting += vec3(ambient + diffuse + specular) / attenuation;
+						}
+				}
+				gl_FragColor.xyz = totalLighting;
+				gl_FragColor.a = 1.0;
+				gl_FragColor = gl_FragColor*texture2D(Tex0, fTexCoord);
+			}
+		</script>
+		<script type="text/javascript" src="common/webgl-utils.js"></script>
+		<script type="text/javascript" src="common/initShaders.js"></script>
+		<script type="text/javascript" src="common/MV.js"></script>
+		<script type="text/javascript" src="common/flatten.js"></script>
+		<script type="text/javascript" src="common/GG.js"></script>
+		<script type="text/javascript" src="assignment5.js"></script>
+		
+		<style type="text/css">
+			canvas {
+				-webkit-touch-callout: none;
+				-webkit-user-select: none;
+				-khtml-user-select: none;
+				-moz-user-select: none;
+				-ms-user-select: none;
+				user-select: none;
+				outline: none;
+				-webkit-tap-highlight-color: rgba(255, 255, 255, 0); /* mobile webkit */
+			}   
+		</style>
+		
+	</head>
+	<body>
+		<div>
+			<span>Coords: </span>
+			<span id="coordsLabel"></span>
+		</div>
+		
+		<canvas style="border:1px solid black; cursor:default; float:left;" id="gl-canvas" width="512" height="512">
+		Oops ... your browser doesn't support the HTML5 canvas element
+		</canvas>
+		<!-- Shape options -->
+		<div style="border:1px solid black; float:left; padding:1em;">
+			<div>
+				Polygon: Sphere
+			</div>
+			<hr>
+			<span><b>Translation:</b> </span>
+			<div> <span>x:</span> <input id="xTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="xTransLabel">0</span> </div>
+			<div> <span>y:</span> <input id="yTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="yTransLabel">0</span></div>
+			<div> <span>z:</span> <input id="zTrans" step="0.1" type="range" data-initial="0" min="-10" max="10"> <span id="zTransLabel">0</span></div>
+			<hr>
+			<span><b>Rotation:</b> </span>
+			<div> <span>x:</span> <input id="xRot" type="range" data-initial="0" min="0" max="360" value="0"> <span id="xRotLabel">0</span> </div>
+			<div> <span>y:</span> <input id="yRot" type="range" data-initial="0" min="0" max="360" value="0"> <span id="yRotLabel">0</span></div>
+			<div> <span>z:</span> <input id="zRot" type="range" data-initial="0" min="0" max="360" value="0"> <span id="zRotLabel">0</span></div>
+			<hr>
+			<span><b>Scale:</b> </span>
+			<div> <span>x:</span> <input id="xScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="xScaleLabel">1
+			</span> </div>
+			<div> <span>y:</span> <input id="yScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="yScaleLabel">1</span></div>
+			<div> <span>z:</span> <input id="zScale" step="0.1" type="range" data-initial="1" min="0" max="10" value="1"> <span id="zScaleLabel">1</span></div>
+			<hr>
+			<span><b>Material:</b> </span>
+			<table>
+			  <tr>
+				<td>ambient:</td>
+				<td><input type="color" id="ambientColorPicker" value="#eeeeee"></td> 
+			  </tr>
+			  <tr>
+				<td>diffuse:</td>
+				<td><input type="color" id="diffuseColorPicker" value="#aaaaaa"></td> 
+			  </tr>
+			  <tr>
+				<td>specular:</td>
+				<td><input type="color" id="specularColorPicker" value="#aaaaaa"></td> 
+			  </tr>
+			  <tr>
+				<td>shininess:</td>
+				<td><input id="shininess" type="range" data-initial="0.5" min="0" max="10" step="0.1" value="0.5"></td> 
+				<td><span id="shininessLabel">0.5</span></td>
+			  </tr>
+			</table>
+			<hr>
+			
+			<hr>
+			<span><b>Texture:</b> </span>
+			<br>
+			Projection:
+			<select id="uvMenu">
+					<option value="planar">planar</option>
+					<option value="spherical">spherical</option>
+			</select>
+			<br>
+			Texture:
+			<select id="textureSelect">
+					<option value="checker">checker</option>
+					<option value="globe">globe</option>
+					<option value="ground">ground</option>
+			</select>
+			<hr>
+			
+			<div style="text-align: center">
+				<button id="placePolygonBtn">Place</button>
+				<button id="removePolygonBtn">Delete</button>
+			</div>
+			<hr>
+			<div style="text-align: center">
+				<span>Selected: </span><span id="selectedPolygon">None</span>
+			</div>
+		</div>
+		<!-- Light 1 options -->
+		<div style="border:1px solid black; float:left; padding:1em;">
+			<span><b>Light 1</b></span> <span> enabled: </span> <input type="checkbox" id="light1Enabled" checked>
+			<hr>
+			<span><b>Color:</b> </span>
+			<table>
+			  <tr>
+				<td>ambient:</td>
+				<td><input type="color" id="light1AmbientColorPicker" value="#ffffff"></td> 
+			  </tr>
+			  <tr>
+				<td>diffuse:</td>
+				<td><input type="color" id="light1DiffuseColorPicker" value="#ffffff"></td> 
+			  </tr>
+			  <tr>
+				<td>specular:</td>
+				<td><input type="color" id="light1SpecularColorPicker" value="#ffffff"></td> 
+			  </tr>
+			</table>
+			<hr>
+			<span><b>Attenuation:</b> </span>
+			<table>
+			  <tr>
+				<td>constant attenuation:</td>
+				<td><input id="light1CAttenuation" type="range" data-initial="0" min="0" max="10" step ="0.1" value="0"></td> 
+				<td><span id="light1CAttenuationLabel">0</span></td>
+			  </tr>
+			  <tr>
+				<td>linear attenuation:</td>
+				<td><input id="light1LAttenuation" type="range" data-initial="0" min="0" max="10" step ="0.1" value="0.7"></td> 
+				<td><span id="light1LAttenuationLabel">0.7</span></td>
+			  </tr>
+			  <tr>
+				<td>quadratic attenuation:</td>
+				<td><input id="light1QAttenuation" type="range" data-initial="0" min="0" max="10" step ="0.1" value="0"></td> 
+				<td><span id="light1QAttenuationLabel">0</span></td>
+			  </tr>
+			</table>
+		</div>
+		
+		<!--Images-->
+		<image width="256" height="256" id="groundTexture" src="images/brick.png" hidden></image>
+		<image width="512" height="256" id="earthTexture" src="images/globe.png" hidden></image>
+		
+	</body>
+</html>
